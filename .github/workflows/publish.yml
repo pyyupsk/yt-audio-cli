@@ -6,7 +6,53 @@ on:
       - "v*"
 
 jobs:
+  verify-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Verify version consistency
+        run: |
+          # Extract version from tag (remove 'v' prefix)
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          echo "Tag version: $TAG_VERSION"
+
+          # Check pyproject.toml
+          PYPROJECT_VERSION=$(grep -Po '(?<=^version = ")[^"]+' pyproject.toml)
+          echo "pyproject.toml version: $PYPROJECT_VERSION"
+          if [ "$TAG_VERSION" != "$PYPROJECT_VERSION" ]; then
+            echo "::error::Version mismatch: tag ($TAG_VERSION) != pyproject.toml ($PYPROJECT_VERSION)"
+            exit 1
+          fi
+
+          # Check src/yt_audio_cli/__init__.py
+          INIT_VERSION=$(grep -Po '(?<=^__version__ = ")[^"]+' src/yt_audio_cli/__init__.py)
+          echo "__init__.py version: $INIT_VERSION"
+          if [ "$TAG_VERSION" != "$INIT_VERSION" ]; then
+            echo "::error::Version mismatch: tag ($TAG_VERSION) != __init__.py ($INIT_VERSION)"
+            exit 1
+          fi
+
+          # Check README.md metadata block
+          README_VERSION=$(grep -Po '(?<="version": ")[^"]+' README.md)
+          echo "README.md version: $README_VERSION"
+          if [ "$TAG_VERSION" != "$README_VERSION" ]; then
+            echo "::error::Version mismatch: tag ($TAG_VERSION) != README.md ($README_VERSION)"
+            exit 1
+          fi
+
+          # Check tests/test_cli.py
+          TEST_VERSION=$(grep -Po '(?<=assert ")[^"]+(?=" in result\.output)' tests/test_cli.py)
+          echo "test_cli.py version: $TEST_VERSION"
+          if [ "$TAG_VERSION" != "$TEST_VERSION" ]; then
+            echo "::error::Version mismatch: tag ($TAG_VERSION) != test_cli.py ($TEST_VERSION)"
+            exit 1
+          fi
+
+          echo "✓ All versions match: $TAG_VERSION"
+
   build:
+    needs: verify-version
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -18,6 +64,16 @@ jobs:
 
       - name: Set up Python
         run: uv python install 3.12
+
+      - name: Sync dependencies
+        run: uv sync
+
+      - name: Verify uv.lock is up to date
+        run: |
+          if ! git diff --quiet uv.lock; then
+            echo "::error::uv.lock is out of sync. Run 'uv sync' and commit the changes."
+            exit 1
+          fi
 
       - name: Build package
         run: uv build
