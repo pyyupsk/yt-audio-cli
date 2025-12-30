@@ -124,6 +124,20 @@ Install FFmpeg using the instructions in [Requirements](#requirements).
 **"Video unavailable"**
 The video may be private, age-restricted, or region-locked. This is a limitation of the source site, not yt-dlp or this tool.
 
+**"Signature solving failed" / JS challenge warnings**
+YouTube uses JavaScript challenges to protect some video formats. You may see warnings like:
+
+```bash
+yt-dlp: [youtube] Signature solving failed: Some formats may be missing.
+```
+
+Downloads usually still work (yt-dlp falls back to alternative formats), but to resolve these warnings:
+
+- **Install Deno** (recommended): `curl -fsSL https://deno.land/install.sh | sh`
+- **Or download the solver**: `yt-dlp --remote-components ejs:github`
+
+See [yt-dlp EJS wiki](https://github.com/yt-dlp/yt-dlp/wiki/EJS) for more details.
+
 **Download fails**
 Check your internet connection and verify the URL is correct. If the issue persists, ensure yt-dlp is up to date: `pip install -U yt-dlp`
 
