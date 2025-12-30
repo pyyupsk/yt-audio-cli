@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import shutil
-import subprocess
+import subprocess  # nosec B404
 from pathlib import Path
 
 from yt_audio_cli.errors import ConversionError, FFmpegNotFoundError
@@ -76,7 +76,7 @@ def transcode(
     cmd.append(str(output_path))
 
     try:
-        result = subprocess.run(
+        result = subprocess.run(  # nosec B603
             cmd,
             capture_output=True,
             text=True,

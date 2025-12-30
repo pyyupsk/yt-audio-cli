@@ -78,9 +78,7 @@ class TestCLIArgumentParsing:
             )
             assert result.exit_code == 0 or mock_process.called
 
-    def test_invalid_format_rejected(
-        self, runner: CliRunner, cli_app: Any
-    ) -> None:
+    def test_invalid_format_rejected(self, runner: CliRunner, cli_app: Any) -> None:
         """Test invalid format is rejected."""
         result = runner.invoke(
             cli_app, ["--format", "invalid", "https://youtube.com/watch?v=test"]
@@ -159,9 +157,7 @@ class TestExitCodes:
 
         return app
 
-    def test_success_exit_code_zero(
-        self, runner: CliRunner, cli_app: Any
-    ) -> None:
+    def test_success_exit_code_zero(self, runner: CliRunner, cli_app: Any) -> None:
         """Test successful download returns exit code 0."""
         with patch("yt_audio_cli.cli.process_urls") as mock_process:
             mock_process.return_value = 0
@@ -177,9 +173,7 @@ class TestExitCodes:
             result = runner.invoke(cli_app, ["https://youtube.com/watch?v=test"])
             assert result.exit_code == 1
 
-    def test_config_error_exit_code_two(
-        self, runner: CliRunner, cli_app: Any
-    ) -> None:
+    def test_config_error_exit_code_two(self, runner: CliRunner, cli_app: Any) -> None:
         """Test config error returns exit code 2."""
         result = runner.invoke(cli_app, ["--format", "invalid", "https://test.com"])
         assert result.exit_code == 2
@@ -200,9 +194,7 @@ class TestBatchDownload:
 
         return app
 
-    def test_multiple_urls_accepted(
-        self, runner: CliRunner, cli_app: Any
-    ) -> None:
+    def test_multiple_urls_accepted(self, runner: CliRunner, cli_app: Any) -> None:
         """Test multiple URLs are accepted as arguments."""
         with patch("yt_audio_cli.cli.process_urls") as mock_process:
             mock_process.return_value = 0
@@ -236,9 +228,7 @@ class TestBatchDownload:
             # Should return 1 for partial failure
             assert result.exit_code == 1
 
-    def test_batch_all_success_exit_zero(
-        self, runner: CliRunner, cli_app: Any
-    ) -> None:
+    def test_batch_all_success_exit_zero(self, runner: CliRunner, cli_app: Any) -> None:
         """Test all successful downloads return exit code 0."""
         with patch("yt_audio_cli.cli.process_urls") as mock_process:
             mock_process.return_value = 0
@@ -446,9 +436,7 @@ class TestMetadataEmbedding:
 
         return app
 
-    def test_no_metadata_flag_parsing(
-        self, runner: CliRunner, cli_app: Any
-    ) -> None:
+    def test_no_metadata_flag_parsing(self, runner: CliRunner, cli_app: Any) -> None:
         """Test --no-metadata flag is parsed."""
         with patch("yt_audio_cli.cli.process_urls") as mock_process:
             mock_process.return_value = 0

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-import subprocess
+import subprocess  # nosec B404
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -79,7 +79,7 @@ def extract_playlist(url: str) -> list[str]:
     ]
 
     try:
-        result = subprocess.run(
+        result = subprocess.run(  # nosec B603
             cmd,
             capture_output=True,
             text=True,
@@ -160,7 +160,7 @@ def download(
     ]
 
     try:
-        result = subprocess.run(
+        result = subprocess.run(  # nosec B603
             cmd,
             capture_output=True,
             text=True,
