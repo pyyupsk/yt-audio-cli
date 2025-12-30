@@ -2,7 +2,7 @@
 
 from yt_audio_cli.core import ConversionError, DownloadError, FFmpegNotFoundError
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 __metadata__ = {
     "name": "yt-audio-cli",
     "version": __version__,
