@@ -1382,9 +1382,7 @@ class TestConvertAudioFileConflict:
             return True
 
         with (
-            patch(
-                "yt_audio_cli.cli.transcode", side_effect=create_temp_output
-            ),
+            patch("yt_audio_cli.cli.transcode", side_effect=create_temp_output),
             patch(
                 "yt_audio_cli.cli.create_conversion_progress",
                 return_value=mock_progress,

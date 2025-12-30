@@ -662,9 +662,7 @@ class TestTranscodeErrorHandling:
 
                 assert "FFmpeg error" in str(exc_info.value)
 
-    def test_transcode_subprocess_error(
-        self, temp_dir: Path, input_file: Path
-    ) -> None:
+    def test_transcode_subprocess_error(self, temp_dir: Path, input_file: Path) -> None:
         """Test transcode handles SubprocessError."""
         from subprocess import SubprocessError
 
