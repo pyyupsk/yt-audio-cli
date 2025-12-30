@@ -351,12 +351,19 @@ def download(
 
             info = cast(dict[str, Any], ydl.sanitize_info(raw_info))
 
-            # Get the downloaded file path
+            # Get the downloaded file path with defensive checks
+            temp_path: Path | None = None
             requested_downloads = info.get("requested_downloads")
-            if requested_downloads and len(requested_downloads) > 0:
-                temp_path = Path(requested_downloads[0]["filepath"])
-            else:
-                # Fallback: construct path from template
+
+            if isinstance(requested_downloads, list) and len(requested_downloads) > 0:
+                first_download = requested_downloads[0]
+                if isinstance(first_download, dict):
+                    filepath = first_download.get("filepath")
+                    if filepath and isinstance(filepath, str):
+                        temp_path = Path(filepath)
+
+            # Fallback: construct path from template
+            if temp_path is None:
                 video_id = str(info.get("id", "unknown"))
                 ext = str(info.get("ext", "webm"))
                 temp_path = output_dir / f"{video_id}.{ext}"

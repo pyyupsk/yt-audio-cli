@@ -163,6 +163,83 @@ class TestDownload:
             assert result.success is True
             assert result.temp_path == temp_dir / "test123.webm"
 
+    def test_download_fallback_when_filepath_missing(self, temp_dir: Path) -> None:
+        """Test download falls back when filepath key is missing."""
+        from yt_audio_cli.download.downloader import download
+
+        mock_info = {
+            "id": "test123",
+            "title": "Test Video",
+            "uploader": "Test Channel",
+            "duration": 180,
+            "ext": "webm",
+            "requested_downloads": [{"format": "bestaudio"}],  # No filepath key
+        }
+
+        mock_ydl = _create_mock_ydl(mock_info)
+
+        with patch("yt_audio_cli.download.downloader.YoutubeDL", return_value=mock_ydl):
+            result = download(
+                "https://youtube.com/watch?v=test123",
+                progress_callback=lambda _d, _t: None,
+                output_dir=temp_dir,
+            )
+
+            assert result.success is True
+            assert result.temp_path == temp_dir / "test123.webm"
+
+    def test_download_fallback_when_filepath_empty(self, temp_dir: Path) -> None:
+        """Test download falls back when filepath is empty string."""
+        from yt_audio_cli.download.downloader import download
+
+        mock_info = {
+            "id": "test123",
+            "title": "Test Video",
+            "uploader": "Test Channel",
+            "duration": 180,
+            "ext": "webm",
+            "requested_downloads": [{"filepath": ""}],
+        }
+
+        mock_ydl = _create_mock_ydl(mock_info)
+
+        with patch("yt_audio_cli.download.downloader.YoutubeDL", return_value=mock_ydl):
+            result = download(
+                "https://youtube.com/watch?v=test123",
+                progress_callback=lambda _d, _t: None,
+                output_dir=temp_dir,
+            )
+
+            assert result.success is True
+            assert result.temp_path == temp_dir / "test123.webm"
+
+    def test_download_fallback_when_first_download_not_dict(
+        self, temp_dir: Path
+    ) -> None:
+        """Test download falls back when first download entry is not a dict."""
+        from yt_audio_cli.download.downloader import download
+
+        mock_info = {
+            "id": "test123",
+            "title": "Test Video",
+            "uploader": "Test Channel",
+            "duration": 180,
+            "ext": "webm",
+            "requested_downloads": ["not a dict"],
+        }
+
+        mock_ydl = _create_mock_ydl(mock_info)
+
+        with patch("yt_audio_cli.download.downloader.YoutubeDL", return_value=mock_ydl):
+            result = download(
+                "https://youtube.com/watch?v=test123",
+                progress_callback=lambda _d, _t: None,
+                output_dir=temp_dir,
+            )
+
+            assert result.success is True
+            assert result.temp_path == temp_dir / "test123.webm"
+
     def test_download_failure(self, temp_dir: Path) -> None:
         """Test download failure returns error result."""
         from yt_audio_cli.download.downloader import download
