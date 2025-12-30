@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import time
 from pathlib import Path
 
 # Characters invalid on any OS (Windows is most restrictive)
@@ -46,7 +47,11 @@ def sanitize(title: str, fallback: str = "audio") -> str:
 
     # Truncate to max length
     if len(sanitized) > MAX_FILENAME_LENGTH:
-        sanitized = sanitized[:MAX_FILENAME_LENGTH].rstrip(" _")
+        sanitized = sanitized[:MAX_FILENAME_LENGTH]
+        sanitized = sanitized.encode("utf-8", errors="ignore").decode(
+            "utf-8", errors="ignore"
+        )
+        sanitized = sanitized.rstrip(" _")
 
     # Use fallback if empty
     if not sanitized:
@@ -59,6 +64,7 @@ def resolve_conflict(path: Path) -> Path:
     """Append numeric suffix if file exists. Returns unique path.
 
     If file.mp3 exists, tries file (1).mp3, file (2).mp3, etc.
+    Falls back to timestamp-based name if limit exceeded.
 
     Args:
         path: The desired output path.
@@ -73,13 +79,13 @@ def resolve_conflict(path: Path) -> Path:
     suffix = path.suffix
     parent = path.parent
 
-    counter = 1
-    while True:
+    # Safety limit to prevent excessive iterations
+    max_attempts = 9999
+
+    for counter in range(1, max_attempts + 1):
         new_path = parent / f"{stem} ({counter}){suffix}"
         if not new_path.exists():
             return new_path
-        counter += 1
 
-        # Safety limit to prevent infinite loops
-        if counter > 9999:
-            raise RuntimeError(f"Too many files with name {stem}")
+    timestamp = int(time.time() * 1000)
+    return parent / f"{stem}_{timestamp}{suffix}"

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import shutil
 import subprocess  # nosec B404
 from pathlib import Path
@@ -11,6 +12,11 @@ from yt_audio_cli.core import ConversionError, FFmpegNotFoundError
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+logger = logging.getLogger(__name__)
+
+# Maximum reasonable duration for progress tracking (24 hours in seconds)
+MAX_DURATION_SECONDS = 86400
 
 # Codec mapping for audio formats
 _CODEC_MAP = {
@@ -51,9 +57,13 @@ def _process_ffmpeg_progress(
         if line.startswith("out_time_ms="):
             try:
                 microseconds = int(line.split("=")[1])
-                if microseconds >= 0:
-                    callback(microseconds / 1_000_000)
-            except (ValueError, IndexError):
+                if microseconds < 0:
+                    continue
+                seconds = microseconds / 1_000_000
+                if seconds > MAX_DURATION_SECONDS:
+                    continue
+                callback(seconds)
+            except (ValueError, IndexError, OverflowError):
                 pass
 
 
@@ -84,6 +94,8 @@ def _build_ffmpeg_command(
         for key, value in metadata.items():
             if value:
                 cmd.extend(["-metadata", f"{key}={value}"])
+            else:
+                logger.debug("Skipping empty metadata field: %s", key)
 
     cmd.append(str(output_path))
     return cmd
@@ -120,6 +132,28 @@ def _run_without_progress(cmd: list[str], input_path: Path) -> None:
         raise ConversionError(str(input_path), result.stderr or "Unknown error")
 
 
+def _validate_output_path(output_path: Path, expected_parent: Path | None) -> None:
+    """Validate output path to prevent path traversal attacks.
+
+    Args:
+        output_path: The output path to validate.
+        expected_parent: Expected parent directory (if None, only resolves path).
+
+    Raises:
+        ValueError: If path contains traversal sequences or is outside expected dir.
+    """
+    resolved = output_path.resolve()
+
+    if expected_parent is not None:
+        expected_resolved = expected_parent.resolve()
+        try:
+            resolved.relative_to(expected_resolved)
+        except ValueError as e:
+            raise ValueError(
+                f"Output path '{output_path}' is outside expected directory"
+            ) from e
+
+
 def transcode(
     input_path: Path,
     output_path: Path,
@@ -147,9 +181,12 @@ def transcode(
     Raises:
         FFmpegNotFoundError: If FFmpeg is not installed.
         ConversionError: If transcoding fails.
+        ValueError: If output path is invalid or contains path traversal.
     """
     if not check_ffmpeg():
         raise FFmpegNotFoundError
+
+    _validate_output_path(output_path, output_path.parent)
 
     effective_metadata = metadata if embed_metadata else None
     output_path.parent.mkdir(parents=True, exist_ok=True)

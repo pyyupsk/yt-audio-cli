@@ -746,8 +746,16 @@ class TestConvertAudio:
         mock_progress.__exit__ = MagicMock(return_value=False)
         mock_progress.add_task = MagicMock(return_value=1)
 
+        def create_temp_output(*args: Any, **kwargs: Any) -> bool:
+            """Mock transcode that creates the temp output file."""
+            output_path = kwargs.get("output_path") or args[1]
+            output_path.touch()
+            return True
+
         with (
-            patch("yt_audio_cli.cli.transcode") as mock_transcode,
+            patch(
+                "yt_audio_cli.cli.transcode", side_effect=create_temp_output
+            ) as mock_transcode,
             patch(
                 "yt_audio_cli.cli.create_conversion_progress",
                 return_value=mock_progress,
