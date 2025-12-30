@@ -1,0 +1,55 @@
+name: Security Issue
+description: Report a security vulnerability
+title: "[Security]: "
+labels: ["security", "priority: high"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ⚠️ **For critical security vulnerabilities, please consider reporting privately first.**
+
+        If this is a critical vulnerability that could be exploited, please email the maintainer directly or use GitHub's private vulnerability reporting feature.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Vulnerability Description
+      description: Describe the security issue.
+      placeholder: What is the vulnerability?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      description: How severe do you consider this vulnerability?
+      options:
+        - Critical - Remote code execution, data loss
+        - High - Significant security impact
+        - Medium - Limited security impact
+        - Low - Minor security concern
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: How can this vulnerability be reproduced?
+    validations:
+      required: true
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact
+      description: What is the potential impact of this vulnerability?
+    validations:
+      required: true
+
+  - type: textarea
+    id: mitigation
+    attributes:
+      label: Suggested Fix
+      description: If you have a suggestion for how to fix this, please describe it.
