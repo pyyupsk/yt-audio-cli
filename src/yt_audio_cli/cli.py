@@ -10,7 +10,7 @@ import typer
 
 from yt_audio_cli import __version__
 from yt_audio_cli.converter import check_ffmpeg, transcode
-from yt_audio_cli.downloader import download
+from yt_audio_cli.downloader import download, extract_playlist, is_playlist
 from yt_audio_cli.errors import FFmpegNotFoundError, format_error
 from yt_audio_cli.filename import resolve_conflict, sanitize
 from yt_audio_cli.progress import (
@@ -165,6 +165,34 @@ def process_single_url(
     return True
 
 
+def expand_playlist_urls(urls: list[str]) -> list[str]:
+    """Expand playlist URLs to individual video URLs.
+
+    Args:
+        urls: List of URLs that may include playlists.
+
+    Returns:
+        Expanded list with all video URLs.
+    """
+    expanded: list[str] = []
+
+    for url in urls:
+        if is_playlist(url):
+            print_info(f"Extracting playlist: {url}")
+            playlist_urls = extract_playlist(url)
+            if playlist_urls:
+                print_info(f"Found {len(playlist_urls)} videos in playlist")
+                expanded.extend(playlist_urls)
+            else:
+                # Could not extract, treat as single video
+                print_info("Could not extract playlist, treating as single video")
+                expanded.append(url)
+        else:
+            expanded.append(url)
+
+    return expanded
+
+
 def process_urls(
     urls: list[str],
     audio_format: str,
@@ -184,10 +212,13 @@ def process_urls(
     Returns:
         Exit code (0 = all success, 1 = some failures).
     """
-    if len(urls) == 1:
+    # Expand any playlist URLs
+    expanded_urls = expand_playlist_urls(urls)
+
+    if len(expanded_urls) == 1:
         # Single URL mode
         success = process_single_url(
-            url=urls[0],
+            url=expanded_urls[0],
             audio_format=audio_format,
             output_dir=output_dir,
             bitrate=bitrate,
@@ -199,8 +230,8 @@ def process_urls(
     succeeded = 0
     failed = 0
 
-    for i, url in enumerate(urls, 1):
-        print_info(f"Processing {i}/{len(urls)}: {url}")
+    for i, url in enumerate(expanded_urls, 1):
+        print_info(f"Processing {i}/{len(expanded_urls)}: {url}")
 
         success = process_single_url(
             url=url,
