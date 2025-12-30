@@ -13,7 +13,6 @@ from rich.progress import (
     TaskID,
     TaskProgressColumn,
     TextColumn,
-    TimeElapsedColumn,
     TimeRemainingColumn,
     TransferSpeedColumn,
 )
@@ -21,6 +20,9 @@ from rich.text import Text
 
 # Global console instance for consistent output
 console = Console()
+
+# Common progress format strings
+_TASK_DESCRIPTION_FORMAT = "[bold blue]{task.description}"
 
 
 class TimeProgressColumn(ProgressColumn):
@@ -77,7 +79,7 @@ def create_progress() -> Progress:
     """
     return Progress(
         SpinnerColumn(),
-        TextColumn("[bold blue]{task.description}"),
+        TextColumn(_TASK_DESCRIPTION_FORMAT),
         BarColumn(),
         DownloadColumn(),
         TransferSpeedColumn(),
@@ -98,7 +100,7 @@ def create_download_progress() -> Progress:
     """
     return Progress(
         SpinnerColumn(),
-        TextColumn("[bold blue]{task.description}"),
+        TextColumn(_TASK_DESCRIPTION_FORMAT),
         BarColumn(),
         DownloadColumn(),
         TransferSpeedColumn(),
@@ -119,7 +121,7 @@ def create_conversion_progress() -> Progress:
     """
     return Progress(
         SpinnerColumn(),
-        TextColumn("[bold blue]{task.description}"),
+        TextColumn(_TASK_DESCRIPTION_FORMAT),
         BarColumn(),
         TimeProgressColumn(),
         TaskProgressColumn(),
@@ -136,7 +138,7 @@ def create_batch_progress() -> Progress:
     """
     return Progress(
         SpinnerColumn(),
-        TextColumn("[bold blue]{task.description}"),
+        TextColumn(_TASK_DESCRIPTION_FORMAT),
         BarColumn(),
         TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
         TextColumn("({task.completed}/{task.total})"),

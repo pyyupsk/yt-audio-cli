@@ -28,7 +28,7 @@ class TestDownloadResult:
         assert result.success is True
         assert result.error is None
         assert result.title == "Test Video"
-        assert result.duration == 212.5
+        assert result.duration == 212.5  # NOSONAR
 
     def test_create_failure_result(self) -> None:
         """Test creating a failed download result."""
@@ -170,7 +170,9 @@ class TestDownload:
             assert result.success is True
             assert result.title == "Test Video Title"
             assert result.artist == "Test Channel"
-            assert result.duration == 212.0  # Duration extracted from metadata
+            assert (
+                result.duration == 212.0
+            )  # Duration extracted from metadata # NOSONAR
             assert mock_popen.called
             # Verify progress was reported
             assert len(progress_calls) == 3
@@ -197,12 +199,12 @@ class TestDownload:
 
             result = download(
                 "https://youtube.com/watch?v=test",
-                progress_callback=lambda d, t: None,
+                progress_callback=lambda _d, _t: None,
                 output_dir=temp_dir,
             )
 
             assert result.success is True
-            assert result.duration == 180.5
+            assert result.duration == 180.5  # NOSONAR
 
     def test_duration_none_when_not_in_metadata(
         self, temp_dir: Path, mock_yt_dlp_success: dict
@@ -224,7 +226,7 @@ class TestDownload:
 
             result = download(
                 "https://youtube.com/watch?v=live",
-                progress_callback=lambda d, t: None,
+                progress_callback=lambda _d, _t: None,
                 output_dir=temp_dir,
             )
 
@@ -242,7 +244,7 @@ class TestDownload:
 
             result = download(
                 "not-a-valid-url",
-                progress_callback=lambda d, t: None,
+                progress_callback=lambda _d, _t: None,
                 output_dir=temp_dir,
             )
 
@@ -261,7 +263,7 @@ class TestDownload:
 
             result = download(
                 "https://youtube.com/watch?v=private",
-                progress_callback=lambda d, t: None,
+                progress_callback=lambda _d, _t: None,
                 output_dir=temp_dir,
             )
 
@@ -279,7 +281,7 @@ class TestDownload:
 
             result = download(
                 "https://youtube.com/watch?v=test",
-                progress_callback=lambda d, t: None,
+                progress_callback=lambda _d, _t: None,
                 output_dir=temp_dir,
             )
 
@@ -297,7 +299,7 @@ class TestDownload:
 
             download(
                 "https://youtube.com/watch?v=test",
-                progress_callback=lambda d, t: None,
+                progress_callback=lambda _d, _t: None,
                 output_dir=temp_dir,
             )
 

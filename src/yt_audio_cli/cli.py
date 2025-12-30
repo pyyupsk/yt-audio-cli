@@ -10,7 +10,13 @@ import typer
 
 from yt_audio_cli import __version__
 from yt_audio_cli.converter import check_ffmpeg, transcode
-from yt_audio_cli.downloader import download, extract_playlist, is_playlist
+from yt_audio_cli.downloader import (
+    DownloadResult,
+    download,
+    extract_metadata,
+    extract_playlist,
+    is_playlist,
+)
 from yt_audio_cli.errors import FFmpegNotFoundError, format_error
 from yt_audio_cli.filename import resolve_conflict, sanitize
 from yt_audio_cli.progress import (
@@ -19,6 +25,7 @@ from yt_audio_cli.progress import (
     print_error,
     print_info,
     print_success,
+    print_warning,
 )
 
 # Valid audio formats
@@ -89,12 +96,81 @@ def resolve_quality(
     return QUALITY_PRESETS["best"].get(audio_format)
 
 
+def _should_skip_existing(url: str, audio_format: str, output_dir: Path) -> bool:
+    """Check if file already exists and should be skipped."""
+    metadata = extract_metadata(url)
+    if not metadata:
+        return False
+    filename = sanitize(metadata.get("title", ""))
+    if not filename:
+        return False
+    output_path = output_dir / f"{filename}.{audio_format}"
+    if output_path.exists():
+        print_warning(f"Skipped (already exists): {output_path}")
+        return True
+    return False
+
+
+def _download_audio(url: str, temp_dir: Path) -> DownloadResult:
+    """Download audio and return result."""
+    with create_download_progress() as progress:
+        task_id = progress.add_task("Downloading...", total=None)
+
+        def callback(downloaded: int, total: int) -> None:
+            if total > 0:
+                progress.update(task_id, completed=downloaded, total=total)
+            else:
+                progress.update(task_id, completed=downloaded)
+
+        return download(url=url, progress_callback=callback, output_dir=temp_dir)
+
+
+def _convert_audio(
+    result: DownloadResult,
+    output_dir: Path,
+    audio_format: str,
+    bitrate: int | None,
+    embed_metadata: bool,
+) -> Path | None:
+    """Convert downloaded audio and return output path, or None on failure."""
+    with create_conversion_progress() as progress:
+        task_id = progress.add_task("Converting...", total=result.duration)
+
+        def callback(processed_seconds: float) -> None:
+            progress.update(task_id, completed=processed_seconds)
+
+        output_path = output_dir / f"{sanitize(result.title)}.{audio_format}"
+        output_path = resolve_conflict(output_path)
+
+        metadata = (
+            {"title": result.title, "artist": result.artist} if embed_metadata else {}
+        )
+
+        try:
+            transcode(
+                input_path=result.temp_path,
+                output_path=output_path,
+                audio_format=audio_format,
+                bitrate=bitrate,
+                embed_metadata=embed_metadata,
+                metadata=metadata,
+                progress_callback=callback,
+            )
+            return output_path
+        except FFmpegNotFoundError:
+            print_error(format_error(FFmpegNotFoundError()))
+        except Exception as e:
+            print_error(format_error(e))
+        return None
+
+
 def process_single_url(
     url: str,
     audio_format: str,
     output_dir: Path,
     bitrate: int | None,
     embed_metadata: bool,
+    force: bool = False,
 ) -> bool:
     """Process a single URL download.
 
@@ -104,25 +180,16 @@ def process_single_url(
         output_dir: Output directory.
         bitrate: Target bitrate in kbps.
         embed_metadata: Whether to embed metadata.
+        force: If False, skip if output file already exists.
 
     Returns:
-        True if download and conversion succeeded.
+        True if download and conversion succeeded (or skipped).
     """
+    if not force and _should_skip_existing(url, audio_format, output_dir):
+        return True
+
     with tempfile.TemporaryDirectory() as temp_dir:
-        with create_download_progress() as download_progress:
-            task_id = download_progress.add_task("Downloading...", total=None)
-
-            def download_callback(downloaded: int, total: int) -> None:
-                if total > 0:
-                    download_progress.update(task_id, completed=downloaded, total=total)
-                else:
-                    download_progress.update(task_id, completed=downloaded)
-
-            result = download(
-                url=url,
-                progress_callback=download_callback,
-                output_dir=Path(temp_dir),
-            )
+        result = _download_audio(url, Path(temp_dir))
 
         if not result.success:
             print_error(f"Download failed: {result.error}")
@@ -134,44 +201,11 @@ def process_single_url(
             )
             return False
 
-        with create_conversion_progress() as convert_progress:
-            convert_task = convert_progress.add_task(
-                "Converting...",
-                total=result.duration,
-            )
-
-            def convert_callback(processed_seconds: float) -> None:
-                convert_progress.update(convert_task, completed=processed_seconds)
-
-            # Prepare output path
-            filename = sanitize(result.title)
-            output_path = output_dir / f"{filename}.{audio_format}"
-            output_path = resolve_conflict(output_path)
-
-            # Prepare metadata
-            metadata = {}
-            if embed_metadata:
-                metadata = {
-                    "title": result.title,
-                    "artist": result.artist,
-                }
-
-            try:
-                transcode(
-                    input_path=result.temp_path,
-                    output_path=output_path,
-                    audio_format=audio_format,
-                    bitrate=bitrate,
-                    embed_metadata=embed_metadata,
-                    metadata=metadata,
-                    progress_callback=convert_callback,
-                )
-            except FFmpegNotFoundError:
-                print_error(format_error(FFmpegNotFoundError()))
-                return False
-            except Exception as e:
-                print_error(format_error(e))
-                return False
+        output_path = _convert_audio(
+            result, output_dir, audio_format, bitrate, embed_metadata
+        )
+        if output_path is None:
+            return False
 
     print_success(f"Saved: {output_path}")
     return True
@@ -211,6 +245,7 @@ def process_urls(
     output_dir: Path,
     bitrate: int | None,
     embed_metadata: bool,
+    force: bool = False,
 ) -> int:
     """Process multiple URLs.
 
@@ -220,25 +255,24 @@ def process_urls(
         output_dir: Output directory.
         bitrate: Target bitrate in kbps.
         embed_metadata: Whether to embed metadata.
+        force: If False, skip files that already exist.
 
     Returns:
         Exit code (0 = all success, 1 = some failures).
     """
-    # Expand any playlist URLs
     expanded_urls = expand_playlist_urls(urls)
 
     if len(expanded_urls) == 1:
-        # Single URL mode
         success = process_single_url(
             url=expanded_urls[0],
             audio_format=audio_format,
             output_dir=output_dir,
             bitrate=bitrate,
             embed_metadata=embed_metadata,
+            force=force,
         )
         return 0 if success else 1
 
-    # Batch mode
     succeeded = 0
     failed = 0
 
@@ -251,6 +285,7 @@ def process_urls(
             output_dir=output_dir,
             bitrate=bitrate,
             embed_metadata=embed_metadata,
+            force=force,
         )
 
         if success:
@@ -326,6 +361,14 @@ def main(
             help="Skip embedding title/artist metadata.",
         ),
     ] = False,
+    force: Annotated[
+        bool,
+        typer.Option(
+            "--force",
+            "-F",
+            help="Download even if file already exists.",
+        ),
+    ] = False,
     version: Annotated[  # noqa: ARG001
         bool,
         typer.Option(
@@ -353,13 +396,13 @@ def main(
     # Resolve bitrate
     resolved_bitrate = resolve_quality(quality, bitrate, audio_format)
 
-    # Process URLs
     exit_code = process_urls(
         urls=urls,
         audio_format=audio_format,
         output_dir=output,
         bitrate=resolved_bitrate,
         embed_metadata=not no_metadata,
+        force=force,
     )
 
     raise typer.Exit(code=exit_code)

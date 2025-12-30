@@ -121,6 +121,40 @@ def extract_playlist(url: str) -> list[str]:
         return []
 
 
+def extract_metadata(url: str) -> dict | None:
+    """Extract video metadata without downloading.
+
+    Args:
+        url: The video URL.
+
+    Returns:
+        Dictionary with title, uploader/channel, duration, or None if failed.
+    """
+    cmd = [
+        "yt-dlp",
+        "--dump-json",
+        "--no-download",
+        "--no-playlist",
+        url,
+    ]
+
+    try:
+        result = subprocess.run(  # nosec B603
+            cmd,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        if result.returncode != 0:
+            return None
+
+        return json.loads(result.stdout.strip())
+
+    except (subprocess.SubprocessError, FileNotFoundError, json.JSONDecodeError):
+        return None
+
+
 def _parse_progress_line(line: str) -> tuple[int, int] | None:
     """Parse a yt-dlp progress line.
 
