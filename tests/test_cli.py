@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-from unittest.mock import MagicMock, patch
+from typing import Any
+from unittest.mock import patch
 
 import pytest
 from typer.testing import CliRunner
-
-if TYPE_CHECKING:
-    pass
 
 # Import will work after CLI is implemented
 # For now, we set up the structure
@@ -24,13 +21,13 @@ class TestCLIArgumentParsing:
         return CliRunner()
 
     @pytest.fixture
-    def cli_app(self) -> MagicMock:
+    def cli_app(self) -> Any:
         """Get the CLI app for testing."""
         from yt_audio_cli.cli import app
 
         return app
 
-    def test_help_flag(self, runner: CliRunner, cli_app: MagicMock) -> None:
+    def test_help_flag(self, runner: CliRunner, cli_app: Any) -> None:
         """Test --help flag shows help text."""
         result = runner.invoke(cli_app, ["--help"])
         assert result.exit_code == 0
@@ -38,18 +35,18 @@ class TestCLIArgumentParsing:
         assert "--format" in result.output or "-f" in result.output
         assert "--output" in result.output or "-o" in result.output
 
-    def test_version_flag(self, runner: CliRunner, cli_app: MagicMock) -> None:
+    def test_version_flag(self, runner: CliRunner, cli_app: Any) -> None:
         """Test --version flag shows version."""
         result = runner.invoke(cli_app, ["--version"])
         assert result.exit_code == 0
         assert "0.1.0" in result.output
 
-    def test_no_urls_shows_error(self, runner: CliRunner, cli_app: MagicMock) -> None:
+    def test_no_urls_shows_error(self, runner: CliRunner, cli_app: Any) -> None:
         """Test that missing URLs shows error."""
         result = runner.invoke(cli_app, [])
         assert result.exit_code != 0
 
-    def test_single_url_accepted(self, runner: CliRunner, cli_app: MagicMock) -> None:
+    def test_single_url_accepted(self, runner: CliRunner, cli_app: Any) -> None:
         """Test single URL is accepted as argument."""
         with patch("yt_audio_cli.cli.process_urls") as mock_process:
             mock_process.return_value = 0
@@ -57,12 +54,12 @@ class TestCLIArgumentParsing:
             # Should call process_urls with the URL
             assert mock_process.called or result.exit_code == 0
 
-    def test_format_flag_default(self, runner: CliRunner, cli_app: MagicMock) -> None:
+    def test_format_flag_default(self, runner: CliRunner, cli_app: Any) -> None:
         """Test default format is mp3."""
         result = runner.invoke(cli_app, ["--help"])
         assert "mp3" in result.output.lower()
 
-    def test_format_flag_short(self, runner: CliRunner, cli_app: MagicMock) -> None:
+    def test_format_flag_short(self, runner: CliRunner, cli_app: Any) -> None:
         """Test -f short flag for format."""
         with patch("yt_audio_cli.cli.process_urls") as mock_process:
             mock_process.return_value = 0
@@ -72,7 +69,7 @@ class TestCLIArgumentParsing:
             # Format should be accepted
             assert result.exit_code == 0 or mock_process.called
 
-    def test_format_flag_long(self, runner: CliRunner, cli_app: MagicMock) -> None:
+    def test_format_flag_long(self, runner: CliRunner, cli_app: Any) -> None:
         """Test --format long flag."""
         with patch("yt_audio_cli.cli.process_urls") as mock_process:
             mock_process.return_value = 0
@@ -82,7 +79,7 @@ class TestCLIArgumentParsing:
             assert result.exit_code == 0 or mock_process.called
 
     def test_invalid_format_rejected(
-        self, runner: CliRunner, cli_app: MagicMock
+        self, runner: CliRunner, cli_app: Any
     ) -> None:
         """Test invalid format is rejected."""
         result = runner.invoke(
@@ -90,7 +87,7 @@ class TestCLIArgumentParsing:
         )
         assert result.exit_code == 2 or "invalid" in result.output.lower()
 
-    def test_output_flag_short(self, runner: CliRunner, cli_app: MagicMock) -> None:
+    def test_output_flag_short(self, runner: CliRunner, cli_app: Any) -> None:
         """Test -o short flag for output directory."""
         with patch("yt_audio_cli.cli.process_urls") as mock_process:
             mock_process.return_value = 0
@@ -99,7 +96,7 @@ class TestCLIArgumentParsing:
             )
             assert result.exit_code == 0 or mock_process.called
 
-    def test_output_flag_long(self, runner: CliRunner, cli_app: MagicMock) -> None:
+    def test_output_flag_long(self, runner: CliRunner, cli_app: Any) -> None:
         """Test --output long flag."""
         with patch("yt_audio_cli.cli.process_urls") as mock_process:
             mock_process.return_value = 0
@@ -109,7 +106,7 @@ class TestCLIArgumentParsing:
             assert result.exit_code == 0 or mock_process.called
 
     def test_output_nonexistent_directory_error(
-        self, runner: CliRunner, cli_app: MagicMock
+        self, runner: CliRunner, cli_app: Any
     ) -> None:
         """Test error when output directory doesn't exist."""
         result = runner.invoke(
@@ -156,14 +153,14 @@ class TestExitCodes:
         return CliRunner()
 
     @pytest.fixture
-    def cli_app(self) -> MagicMock:
+    def cli_app(self) -> Any:
         """Get the CLI app for testing."""
         from yt_audio_cli.cli import app
 
         return app
 
     def test_success_exit_code_zero(
-        self, runner: CliRunner, cli_app: MagicMock
+        self, runner: CliRunner, cli_app: Any
     ) -> None:
         """Test successful download returns exit code 0."""
         with patch("yt_audio_cli.cli.process_urls") as mock_process:
@@ -172,7 +169,7 @@ class TestExitCodes:
             assert result.exit_code == 0
 
     def test_download_failure_exit_code_one(
-        self, runner: CliRunner, cli_app: MagicMock
+        self, runner: CliRunner, cli_app: Any
     ) -> None:
         """Test download failure returns exit code 1."""
         with patch("yt_audio_cli.cli.process_urls") as mock_process:
@@ -181,7 +178,7 @@ class TestExitCodes:
             assert result.exit_code == 1
 
     def test_config_error_exit_code_two(
-        self, runner: CliRunner, cli_app: MagicMock
+        self, runner: CliRunner, cli_app: Any
     ) -> None:
         """Test config error returns exit code 2."""
         result = runner.invoke(cli_app, ["--format", "invalid", "https://test.com"])
@@ -197,14 +194,14 @@ class TestBatchDownload:
         return CliRunner()
 
     @pytest.fixture
-    def cli_app(self) -> MagicMock:
+    def cli_app(self) -> Any:
         """Get the CLI app for testing."""
         from yt_audio_cli.cli import app
 
         return app
 
     def test_multiple_urls_accepted(
-        self, runner: CliRunner, cli_app: MagicMock
+        self, runner: CliRunner, cli_app: Any
     ) -> None:
         """Test multiple URLs are accepted as arguments."""
         with patch("yt_audio_cli.cli.process_urls") as mock_process:
@@ -223,7 +220,7 @@ class TestBatchDownload:
             assert len(call_args[1]["urls"]) == 3
 
     def test_batch_partial_failure_continues(
-        self, runner: CliRunner, cli_app: MagicMock
+        self, runner: CliRunner, cli_app: Any
     ) -> None:
         """Test batch continues on partial failure."""
         # process_urls returns 1 when some downloads fail
@@ -240,7 +237,7 @@ class TestBatchDownload:
             assert result.exit_code == 1
 
     def test_batch_all_success_exit_zero(
-        self, runner: CliRunner, cli_app: MagicMock
+        self, runner: CliRunner, cli_app: Any
     ) -> None:
         """Test all successful downloads return exit code 0."""
         with patch("yt_audio_cli.cli.process_urls") as mock_process:
@@ -443,14 +440,14 @@ class TestMetadataEmbedding:
         return CliRunner()
 
     @pytest.fixture
-    def cli_app(self) -> MagicMock:
+    def cli_app(self) -> Any:
         """Get the CLI app for testing."""
         from yt_audio_cli.cli import app
 
         return app
 
     def test_no_metadata_flag_parsing(
-        self, runner: CliRunner, cli_app: MagicMock
+        self, runner: CliRunner, cli_app: Any
     ) -> None:
         """Test --no-metadata flag is parsed."""
         with patch("yt_audio_cli.cli.process_urls") as mock_process:
@@ -465,7 +462,7 @@ class TestMetadataEmbedding:
             assert call_args[1]["embed_metadata"] is False
 
     def test_metadata_embedded_by_default(
-        self, runner: CliRunner, cli_app: MagicMock
+        self, runner: CliRunner, cli_app: Any
     ) -> None:
         """Test metadata is embedded by default."""
         with patch("yt_audio_cli.cli.process_urls") as mock_process:

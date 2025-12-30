@@ -188,9 +188,21 @@ class TestExtractPlaylist:
 
         # yt-dlp --flat-playlist outputs one JSON per line
         playlist_entries = [
-            {"id": "video1", "url": "https://youtube.com/watch?v=video1", "_type": "url"},
-            {"id": "video2", "url": "https://youtube.com/watch?v=video2", "_type": "url"},
-            {"id": "video3", "url": "https://youtube.com/watch?v=video3", "_type": "url"},
+            {
+                "id": "video1",
+                "url": "https://youtube.com/watch?v=video1",
+                "_type": "url",
+            },
+            {
+                "id": "video2",
+                "url": "https://youtube.com/watch?v=video2",
+                "_type": "url",
+            },
+            {
+                "id": "video3",
+                "url": "https://youtube.com/watch?v=video3",
+                "_type": "url",
+            },
         ]
         mock_output = "\n".join(json.dumps(entry) for entry in playlist_entries)
 
@@ -250,8 +262,16 @@ class TestExtractPlaylist:
         # Unavailable videos are typically omitted from flat-playlist output
         # or appear with different structure
         playlist_entries = [
-            {"id": "video1", "url": "https://youtube.com/watch?v=video1", "_type": "url"},
-            {"id": "video3", "url": "https://youtube.com/watch?v=video3", "_type": "url"},
+            {
+                "id": "video1",
+                "url": "https://youtube.com/watch?v=video1",
+                "_type": "url",
+            },
+            {
+                "id": "video3",
+                "url": "https://youtube.com/watch?v=video3",
+                "_type": "url",
+            },
         ]
         mock_output = "\n".join(json.dumps(entry) for entry in playlist_entries)
 

@@ -205,9 +205,7 @@ class TestTranscode:
                 # Metadata should not be present when embed_metadata=False
                 assert "-metadata" not in cmd_str
 
-    def test_transcode_ffmpeg_not_found(
-        self, temp_dir: Path, input_file: Path
-    ) -> None:
+    def test_transcode_ffmpeg_not_found(self, temp_dir: Path, input_file: Path) -> None:
         """Test transcode raises error when FFmpeg not found."""
         output_path = temp_dir / "output.mp3"
 

@@ -45,9 +45,21 @@ def mock_yt_dlp_playlist() -> dict:
         "id": "PLtest123",
         "title": "Test Playlist",
         "entries": [
-            {"id": "video1", "title": "Video 1", "url": "https://youtube.com/watch?v=video1"},
-            {"id": "video2", "title": "Video 2", "url": "https://youtube.com/watch?v=video2"},
-            {"id": "video3", "title": "Video 3", "url": "https://youtube.com/watch?v=video3"},
+            {
+                "id": "video1",
+                "title": "Video 1",
+                "url": "https://youtube.com/watch?v=video1",
+            },
+            {
+                "id": "video2",
+                "title": "Video 2",
+                "url": "https://youtube.com/watch?v=video2",
+            },
+            {
+                "id": "video3",
+                "title": "Video 3",
+                "url": "https://youtube.com/watch?v=video3",
+            },
         ],
     }
 

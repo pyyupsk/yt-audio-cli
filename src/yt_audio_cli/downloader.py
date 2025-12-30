@@ -56,10 +56,7 @@ def is_playlist(url: str) -> bool:
         return True
 
     # Check for /playlist path
-    if "/playlist" in parsed.path:
-        return True
-
-    return False
+    return "/playlist" in parsed.path
 
 
 def extract_playlist(url: str) -> list[str]:
@@ -123,7 +120,7 @@ def extract_playlist(url: str) -> list[str]:
 
 def download(
     url: str,
-    progress_callback: Callable[[int, int], None],
+    progress_callback: Callable[[int, int], None],  # noqa: ARG001
     output_dir: Path | None = None,
 ) -> DownloadResult:
     """Download audio from URL using yt-dlp.
@@ -149,9 +146,12 @@ def download(
     cmd = [
         "yt-dlp",
         "--extract-audio",
-        "--audio-format", "best",
-        "--audio-quality", "0",
-        "--output", output_template,
+        "--audio-format",
+        "best",
+        "--audio-quality",
+        "0",
+        "--output",
+        output_template,
         "--print-json",
         "--no-playlist",  # Download single video even if in playlist context
         "--progress",

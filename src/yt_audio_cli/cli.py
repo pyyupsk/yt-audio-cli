@@ -314,7 +314,7 @@ def main(
             help="Skip embedding title/artist metadata.",
         ),
     ] = False,
-    version: Annotated[
+    version: Annotated[  # noqa: ARG001
         bool,
         typer.Option(
             "--version",

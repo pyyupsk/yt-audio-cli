@@ -50,6 +50,12 @@ ignore = [
     "E501", # line too long (handled by formatter)
 ]
 
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = [
+    "ARG005",
+    "SIM117",
+] # Unused lambda args in tests, nested with statements
+
 [tool.ruff.lint.isort]
 known-first-party = ["yt_audio_cli"]
 

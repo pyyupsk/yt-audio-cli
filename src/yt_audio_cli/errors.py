@@ -62,7 +62,9 @@ def format_error(error: Exception) -> str:
         return f"Download failed: {error.message}"
 
     if isinstance(error, ConversionError):
-        return f"Conversion failed: {error.message}. Ensure FFmpeg is properly installed."
+        return (
+            f"Conversion failed: {error.message}. Ensure FFmpeg is properly installed."
+        )
 
     if isinstance(error, FFmpegNotFoundError):
         return str(error)
