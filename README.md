@@ -110,8 +110,11 @@ yt-audio-cli --no-metadata URL
 | `--quality`     | `-q`  | Quality preset (best, good, small) | best        |
 | `--bitrate`     | `-b`  | Exact bitrate in kbps (32-320)     | -           |
 | `--no-metadata` |       | Skip embedding metadata            | -           |
+| `--force`       | `-F`  | Re-download even if file exists    | -           |
 | `--version`     | `-v`  | Show version                       | -           |
 | `--help`        | `-h`  | Show help                          | -           |
+
+> **Note:** By default, files that already exist in the output directory are skipped. Use `--force` to re-download them.
 
 ## Troubleshooting
 

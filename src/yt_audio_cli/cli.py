@@ -100,8 +100,12 @@ def resolve_quality(
     return QUALITY_PRESETS["best"].get(audio_format)
 
 
-def _should_skip_existing(url: str, audio_format: str, output_dir: Path) -> bool:
-    """Check if file already exists and should be skipped."""
+def _check_exists(url: str, audio_format: str, output_dir: Path) -> bool:
+    """Check if output file for URL already exists.
+
+    Returns:
+        True if file exists and should be skipped, False otherwise.
+    """
     metadata = extract_metadata(url)
     if not metadata:
         return False
@@ -109,10 +113,34 @@ def _should_skip_existing(url: str, audio_format: str, output_dir: Path) -> bool
     if not filename:
         return False
     output_path = output_dir / f"{filename}.{audio_format}"
-    if output_path.exists():
-        print_warning(f"Skipped (already exists): {output_path}")
-        return True
-    return False
+    return output_path.exists()
+
+
+def _filter_existing_urls(
+    urls: list[str],
+    audio_format: str,
+    output_dir: Path,
+) -> tuple[list[str], int]:
+    """Filter out URLs whose output files already exist.
+
+    Args:
+        urls: List of URLs to check.
+        audio_format: Target audio format.
+        output_dir: Output directory.
+
+    Returns:
+        Tuple of (urls_to_download, skipped_count).
+    """
+    urls_to_download: list[str] = []
+    skipped = 0
+
+    for url in urls:
+        if _check_exists(url, audio_format, output_dir):
+            skipped += 1
+        else:
+            urls_to_download.append(url)
+
+    return urls_to_download, skipped
 
 
 def _download_audio(url: str, temp_dir: Path) -> DownloadResult:
@@ -174,7 +202,6 @@ def process_single_url(
     output_dir: Path,
     bitrate: int | None,
     embed_metadata: bool,
-    force: bool = False,
 ) -> bool:
     """Process a single URL download.
 
@@ -184,14 +211,10 @@ def process_single_url(
         output_dir: Output directory.
         bitrate: Target bitrate in kbps.
         embed_metadata: Whether to embed metadata.
-        force: If False, skip if output file already exists.
 
     Returns:
-        True if download and conversion succeeded (or skipped).
+        True if download and conversion succeeded.
     """
-    if not force and _should_skip_existing(url, audio_format, output_dir):
-        return True
-
     with tempfile.TemporaryDirectory() as temp_dir:
         result = _download_audio(url, Path(temp_dir))
 
@@ -266,22 +289,37 @@ def process_urls(
     """
     expanded_urls = expand_playlist_urls(urls)
 
-    if len(expanded_urls) == 1:
+    # Filter out existing files unless force is set
+    skipped = 0
+    if not force and len(expanded_urls) > 0:
+        print_info("Checking for existing files...")
+        urls_to_process, skipped = _filter_existing_urls(
+            expanded_urls, audio_format, output_dir
+        )
+        if skipped > 0:
+            print_warning(f"Skipped {skipped} already downloaded")
+    else:
+        urls_to_process = expanded_urls
+
+    if len(urls_to_process) == 0:
+        print_info("Nothing to download")
+        return 0
+
+    if len(urls_to_process) == 1:
         success = process_single_url(
-            url=expanded_urls[0],
+            url=urls_to_process[0],
             audio_format=audio_format,
             output_dir=output_dir,
             bitrate=bitrate,
             embed_metadata=embed_metadata,
-            force=force,
         )
         return 0 if success else 1
 
     succeeded = 0
     failed = 0
 
-    for i, url in enumerate(expanded_urls, 1):
-        print_info(f"Processing {i}/{len(expanded_urls)}: {url}")
+    for i, url in enumerate(urls_to_process, 1):
+        print_info(f"Processing {i}/{len(urls_to_process)}: {url}")
 
         success = process_single_url(
             url=url,
@@ -289,7 +327,6 @@ def process_urls(
             output_dir=output_dir,
             bitrate=bitrate,
             embed_metadata=embed_metadata,
-            force=force,
         )
 
         if success:
@@ -297,8 +334,11 @@ def process_urls(
         else:
             failed += 1
 
-    # Print summary
-    print_info(f"\nCompleted: {succeeded} succeeded, {failed} failed")
+    # Print summary with skip info
+    summary = f"\nCompleted: {succeeded} succeeded, {failed} failed"
+    if skipped > 0:
+        summary += f", {skipped} skipped"
+    print_info(summary)
 
     return 0 if failed == 0 else 1
 

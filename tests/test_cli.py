@@ -465,58 +465,114 @@ class TestMetadataEmbedding:
             assert call_args[1]["embed_metadata"] is True
 
 
-class TestShouldSkipExisting:
-    """Tests for _should_skip_existing() helper function."""
+class TestCheckExists:
+    """Tests for _check_exists() helper function."""
 
-    def test_skips_when_file_exists(self, temp_dir: Any) -> None:
+    def test_returns_true_when_file_exists(self, temp_dir: Any) -> None:
         """Test returns True when output file already exists."""
         from pathlib import Path
 
-        from yt_audio_cli.cli import _should_skip_existing
+        from yt_audio_cli.cli import _check_exists
 
         # Create existing file
         (temp_dir / "Test_Video.mp3").touch()
 
-        with (
-            patch("yt_audio_cli.cli.extract_metadata") as mock_extract,
-            patch("yt_audio_cli.cli.print_warning"),
-        ):
+        with patch("yt_audio_cli.cli.extract_metadata") as mock_extract:
             mock_extract.return_value = {"title": "Test Video"}
-            result = _should_skip_existing("https://test.com", "mp3", Path(temp_dir))
+            result = _check_exists("https://test.com", "mp3", Path(temp_dir))
             assert result is True
 
-    def test_does_not_skip_when_file_missing(self, temp_dir: Any) -> None:
+    def test_returns_false_when_file_missing(self, temp_dir: Any) -> None:
         """Test returns False when output file doesn't exist."""
         from pathlib import Path
 
-        from yt_audio_cli.cli import _should_skip_existing
+        from yt_audio_cli.cli import _check_exists
 
         with patch("yt_audio_cli.cli.extract_metadata") as mock_extract:
             mock_extract.return_value = {"title": "Test Video"}
-            result = _should_skip_existing("https://test.com", "mp3", Path(temp_dir))
+            result = _check_exists("https://test.com", "mp3", Path(temp_dir))
             assert result is False
 
     def test_returns_false_when_metadata_extraction_fails(self, temp_dir: Any) -> None:
         """Test returns False when metadata extraction fails."""
         from pathlib import Path
 
-        from yt_audio_cli.cli import _should_skip_existing
+        from yt_audio_cli.cli import _check_exists
 
         with patch("yt_audio_cli.cli.extract_metadata") as mock_extract:
             mock_extract.return_value = None
-            result = _should_skip_existing("https://test.com", "mp3", Path(temp_dir))
+            result = _check_exists("https://test.com", "mp3", Path(temp_dir))
             assert result is False
 
     def test_returns_false_when_title_empty(self, temp_dir: Any) -> None:
         """Test returns False when title is empty."""
         from pathlib import Path
 
-        from yt_audio_cli.cli import _should_skip_existing
+        from yt_audio_cli.cli import _check_exists
 
         with patch("yt_audio_cli.cli.extract_metadata") as mock_extract:
             mock_extract.return_value = {"title": ""}
-            result = _should_skip_existing("https://test.com", "mp3", Path(temp_dir))
+            result = _check_exists("https://test.com", "mp3", Path(temp_dir))
             assert result is False
+
+
+class TestFilterExistingUrls:
+    """Tests for _filter_existing_urls() helper function."""
+
+    def test_filters_out_existing_files(self, temp_dir: Any) -> None:
+        """Test filters out URLs with existing files."""
+        from pathlib import Path
+
+        from yt_audio_cli.cli import _filter_existing_urls
+
+        # Create existing file for first URL
+        (temp_dir / "Video_1.mp3").touch()
+
+        with patch("yt_audio_cli.cli.extract_metadata") as mock_extract:
+            mock_extract.side_effect = [
+                {"title": "Video 1"},  # exists
+                {"title": "Video 2"},  # doesn't exist
+                {"title": "Video 3"},  # doesn't exist
+            ]
+            urls = ["https://test.com/1", "https://test.com/2", "https://test.com/3"]
+            result, skipped = _filter_existing_urls(urls, "mp3", Path(temp_dir))
+
+            assert len(result) == 2
+            assert skipped == 1
+            assert "https://test.com/2" in result
+            assert "https://test.com/3" in result
+
+    def test_returns_all_urls_when_none_exist(self, temp_dir: Any) -> None:
+        """Test returns all URLs when no files exist."""
+        from pathlib import Path
+
+        from yt_audio_cli.cli import _filter_existing_urls
+
+        with patch("yt_audio_cli.cli.extract_metadata") as mock_extract:
+            mock_extract.return_value = {"title": "New Video"}
+            urls = ["https://test.com/1", "https://test.com/2"]
+            result, skipped = _filter_existing_urls(urls, "mp3", Path(temp_dir))
+
+            assert len(result) == 2
+            assert skipped == 0
+
+    def test_returns_empty_when_all_exist(self, temp_dir: Any) -> None:
+        """Test returns empty list when all files exist."""
+        from pathlib import Path
+
+        from yt_audio_cli.cli import _filter_existing_urls
+
+        # Create existing files
+        (temp_dir / "Video_1.mp3").touch()
+        (temp_dir / "Video_2.mp3").touch()
+
+        with patch("yt_audio_cli.cli.extract_metadata") as mock_extract:
+            mock_extract.side_effect = [{"title": "Video 1"}, {"title": "Video 2"}]
+            urls = ["https://test.com/1", "https://test.com/2"]
+            result, skipped = _filter_existing_urls(urls, "mp3", Path(temp_dir))
+
+            assert len(result) == 0
+            assert skipped == 2
 
 
 class TestDownloadAudio:
@@ -783,67 +839,6 @@ class TestProcessSingleUrl:
                 True,
             )
             assert success is True
-
-    def test_skips_existing_file(self, temp_dir: Any) -> None:
-        """Test skips when file exists and force=False."""
-        from pathlib import Path
-
-        from yt_audio_cli.cli import process_single_url
-
-        with patch("yt_audio_cli.cli._should_skip_existing") as mock_skip:
-            mock_skip.return_value = True
-
-            success = process_single_url(
-                "https://test.com",
-                "mp3",
-                Path(temp_dir),
-                320,
-                True,
-                force=False,
-            )
-            assert success is True
-            mock_skip.assert_called_once()
-
-    def test_does_not_skip_with_force_flag(self, temp_dir: Any) -> None:
-        """Test does not skip when force=True."""
-        from pathlib import Path
-
-        from yt_audio_cli.cli import process_single_url
-        from yt_audio_cli.download import DownloadResult
-
-        mock_result = DownloadResult(
-            url="https://test.com",
-            success=True,
-            title="Test",
-            artist="Artist",
-            duration=120.0,
-            temp_path=Path(temp_dir) / "test.webm",
-            error=None,
-        )
-
-        with (
-            patch("yt_audio_cli.cli._should_skip_existing") as mock_skip,
-            patch("yt_audio_cli.cli._download_audio") as mock_download,
-            patch("yt_audio_cli.cli._convert_audio") as mock_convert,
-            patch("yt_audio_cli.cli.print_success"),
-            patch("tempfile.TemporaryDirectory") as mock_tempdir,
-        ):
-            mock_tempdir.return_value.__enter__ = lambda s: str(temp_dir)
-            mock_tempdir.return_value.__exit__ = lambda s, *args: None
-            mock_download.return_value = mock_result
-            mock_result.temp_path.touch()
-            mock_convert.return_value = Path(temp_dir) / "test.mp3"
-
-            process_single_url(
-                "https://test.com",
-                "mp3",
-                Path(temp_dir),
-                320,
-                True,
-                force=True,
-            )
-            # _should_skip_existing should not be called with force=True
-            mock_skip.assert_not_called()
 
     def test_download_failure(self, temp_dir: Any) -> None:
         """Test handles download failure."""
