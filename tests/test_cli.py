@@ -515,6 +515,21 @@ class TestCheckExists:
             result = _check_exists("https://test.com", "mp3", Path(temp_dir))
             assert result is False
 
+    def test_returns_false_when_sanitized_filename_empty(self, temp_dir: Any) -> None:
+        """Test returns False when sanitized filename is empty (special chars only)."""
+        from pathlib import Path
+
+        from yt_audio_cli.cli import _check_exists
+
+        with (
+            patch("yt_audio_cli.cli.extract_metadata") as mock_extract,
+            patch("yt_audio_cli.cli.sanitize") as mock_sanitize,
+        ):
+            mock_extract.return_value = {"title": "***"}
+            mock_sanitize.return_value = ""  # sanitize returns empty for special chars
+            result = _check_exists("https://test.com", "mp3", Path(temp_dir))
+            assert result is False
+
 
 class TestFilterExistingUrls:
     """Tests for _filter_existing_urls() helper function."""
@@ -947,3 +962,295 @@ class TestProcessSingleUrl:
                 True,
             )
             assert success is False
+
+
+class TestProcessUrlsSkipScenarios:
+    """Tests for process_urls() skip and filter scenarios."""
+
+    def test_skipped_files_shows_warning(self, temp_dir: Any) -> None:
+        """Test shows warning when files are skipped."""
+        from pathlib import Path
+
+        from yt_audio_cli.cli import process_urls
+
+        with (
+            patch("yt_audio_cli.cli.expand_playlist_urls") as mock_expand,
+            patch("yt_audio_cli.cli._filter_existing_urls") as mock_filter,
+            patch("yt_audio_cli.cli.process_single_url") as mock_process,
+            patch("yt_audio_cli.cli.print_info"),
+            patch("yt_audio_cli.cli.print_warning") as mock_warning,
+        ):
+            mock_expand.return_value = ["https://test.com/1", "https://test.com/2"]
+            mock_filter.return_value = (["https://test.com/2"], 1)  # 1 skipped
+            mock_process.return_value = True
+
+            process_urls(
+                urls=["https://test.com/1", "https://test.com/2"],
+                audio_format="mp3",
+                output_dir=Path(temp_dir),
+                bitrate=320,
+                embed_metadata=True,
+                force=False,
+            )
+
+            mock_warning.assert_called_once_with("Skipped 1 already downloaded")
+
+    def test_nothing_to_download_when_all_skipped(self, temp_dir: Any) -> None:
+        """Test returns 0 when all files already exist."""
+        from pathlib import Path
+
+        from yt_audio_cli.cli import process_urls
+
+        with (
+            patch("yt_audio_cli.cli.expand_playlist_urls") as mock_expand,
+            patch("yt_audio_cli.cli._filter_existing_urls") as mock_filter,
+            patch("yt_audio_cli.cli.print_info") as mock_info,
+        ):
+            mock_expand.return_value = ["https://test.com/1", "https://test.com/2"]
+            mock_filter.return_value = ([], 2)  # All skipped
+
+            exit_code = process_urls(
+                urls=["https://test.com/1", "https://test.com/2"],
+                audio_format="mp3",
+                output_dir=Path(temp_dir),
+                bitrate=320,
+                embed_metadata=True,
+                force=False,
+            )
+
+            assert exit_code == 0
+            mock_info.assert_any_call("Nothing to download")
+
+    def test_single_url_after_filtering(self, temp_dir: Any) -> None:
+        """Test single URL path after filtering out existing files."""
+        from pathlib import Path
+
+        from yt_audio_cli.cli import process_urls
+
+        with (
+            patch("yt_audio_cli.cli.expand_playlist_urls") as mock_expand,
+            patch("yt_audio_cli.cli._filter_existing_urls") as mock_filter,
+            patch("yt_audio_cli.cli.process_single_url") as mock_process,
+            patch("yt_audio_cli.cli.print_info"),
+            patch("yt_audio_cli.cli.print_warning"),
+        ):
+            mock_expand.return_value = ["https://test.com/1", "https://test.com/2"]
+            mock_filter.return_value = (["https://test.com/2"], 1)  # Only 1 remains
+            mock_process.return_value = True
+
+            exit_code = process_urls(
+                urls=["https://test.com/1", "https://test.com/2"],
+                audio_format="mp3",
+                output_dir=Path(temp_dir),
+                bitrate=320,
+                embed_metadata=True,
+                force=False,
+            )
+
+            assert exit_code == 0
+            mock_process.assert_called_once()
+
+    def test_force_skips_filtering(self, temp_dir: Any) -> None:
+        """Test force=True skips the filtering step."""
+        from pathlib import Path
+
+        from yt_audio_cli.cli import process_urls
+
+        with (
+            patch("yt_audio_cli.cli.expand_playlist_urls") as mock_expand,
+            patch("yt_audio_cli.cli._filter_existing_urls") as mock_filter,
+            patch("yt_audio_cli.cli.process_single_url") as mock_process,
+            patch("yt_audio_cli.cli.print_info"),
+        ):
+            mock_expand.return_value = ["https://test.com/1", "https://test.com/2"]
+            mock_process.return_value = True
+
+            process_urls(
+                urls=["https://test.com/1", "https://test.com/2"],
+                audio_format="mp3",
+                output_dir=Path(temp_dir),
+                bitrate=320,
+                embed_metadata=True,
+                force=True,
+            )
+
+            # Filter should not be called when force=True
+            mock_filter.assert_not_called()
+
+    def test_summary_includes_skip_count(self, temp_dir: Any) -> None:
+        """Test summary includes skip count when files were skipped."""
+        from pathlib import Path
+
+        from yt_audio_cli.cli import process_urls
+
+        with (
+            patch("yt_audio_cli.cli.expand_playlist_urls") as mock_expand,
+            patch("yt_audio_cli.cli._filter_existing_urls") as mock_filter,
+            patch("yt_audio_cli.cli.process_single_url") as mock_process,
+            patch("yt_audio_cli.cli.print_info") as mock_info,
+            patch("yt_audio_cli.cli.print_warning"),
+        ):
+            mock_expand.return_value = [
+                "https://test.com/1",
+                "https://test.com/2",
+                "https://test.com/3",
+            ]
+            # 1 skipped, 2 to process
+            mock_filter.return_value = (
+                ["https://test.com/2", "https://test.com/3"],
+                1,
+            )
+            mock_process.return_value = True
+
+            process_urls(
+                urls=["https://test.com/1", "https://test.com/2", "https://test.com/3"],
+                audio_format="mp3",
+                output_dir=Path(temp_dir),
+                bitrate=320,
+                embed_metadata=True,
+                force=False,
+            )
+
+            # Check summary includes skip count
+            summary_calls = [
+                call for call in mock_info.call_args_list if "skipped" in str(call)
+            ]
+            assert len(summary_calls) == 1
+
+
+class TestProgressCallbacks:
+    """Tests for progress callback execution in download/convert."""
+
+    def test_download_callback_with_total(self, temp_dir: Any) -> None:
+        """Test download progress callback when total is known."""
+        from pathlib import Path
+        from unittest.mock import MagicMock
+
+        from yt_audio_cli.cli import _download_audio
+        from yt_audio_cli.download import DownloadResult
+
+        mock_result = DownloadResult(
+            url="https://test.com",
+            success=True,
+            title="Test",
+            artist="Artist",
+            duration=120.0,
+            temp_path=Path(temp_dir) / "test.webm",
+            error=None,
+        )
+
+        mock_progress = MagicMock()
+        mock_progress.__enter__ = MagicMock(return_value=mock_progress)
+        mock_progress.__exit__ = MagicMock(return_value=False)
+        mock_progress.add_task = MagicMock(return_value=1)
+
+        captured_callback = None
+
+        def capture_callback(**kwargs: Any) -> DownloadResult:
+            nonlocal captured_callback
+            captured_callback = kwargs.get("progress_callback")
+            return mock_result
+
+        with (
+            patch("yt_audio_cli.cli.download", side_effect=capture_callback),
+            patch(
+                "yt_audio_cli.cli.create_download_progress",
+                return_value=mock_progress,
+            ),
+        ):
+            _download_audio("https://test.com", Path(temp_dir))
+
+            # Call the callback with total > 0
+            assert captured_callback is not None  # NOSONAR - modified by closure
+            captured_callback(1000, 5000)
+            mock_progress.update.assert_called_with(1, completed=1000, total=5000)
+
+    def test_download_callback_without_total(self, temp_dir: Any) -> None:
+        """Test download progress callback when total is unknown."""
+        from pathlib import Path
+        from unittest.mock import MagicMock
+
+        from yt_audio_cli.cli import _download_audio
+        from yt_audio_cli.download import DownloadResult
+
+        mock_result = DownloadResult(
+            url="https://test.com",
+            success=True,
+            title="Test",
+            artist="Artist",
+            duration=120.0,
+            temp_path=Path(temp_dir) / "test.webm",
+            error=None,
+        )
+
+        mock_progress = MagicMock()
+        mock_progress.__enter__ = MagicMock(return_value=mock_progress)
+        mock_progress.__exit__ = MagicMock(return_value=False)
+        mock_progress.add_task = MagicMock(return_value=1)
+
+        captured_callback = None
+
+        def capture_callback(**kwargs: Any) -> DownloadResult:
+            nonlocal captured_callback
+            captured_callback = kwargs.get("progress_callback")
+            return mock_result
+
+        with (
+            patch("yt_audio_cli.cli.download", side_effect=capture_callback),
+            patch(
+                "yt_audio_cli.cli.create_download_progress",
+                return_value=mock_progress,
+            ),
+        ):
+            _download_audio("https://test.com", Path(temp_dir))
+
+            # Call the callback with total = 0
+            assert captured_callback is not None  # NOSONAR - modified by closure
+            captured_callback(1000, 0)
+            mock_progress.update.assert_called_with(1, completed=1000)
+
+    def test_convert_callback_updates_progress(self, temp_dir: Any) -> None:
+        """Test conversion progress callback updates task."""
+        from pathlib import Path
+        from unittest.mock import MagicMock
+
+        from yt_audio_cli.cli import _convert_audio
+        from yt_audio_cli.download import DownloadResult
+
+        temp_file = Path(temp_dir) / "input.webm"
+        temp_file.touch()
+
+        result = DownloadResult(
+            url="https://test.com",
+            success=True,
+            title="Test",
+            artist="Artist",
+            duration=120.0,
+            temp_path=temp_file,
+            error=None,
+        )
+
+        mock_progress = MagicMock()
+        mock_progress.__enter__ = MagicMock(return_value=mock_progress)
+        mock_progress.__exit__ = MagicMock(return_value=False)
+        mock_progress.add_task = MagicMock(return_value=1)
+
+        captured_callback = None
+
+        def capture_callback(**kwargs: Any) -> None:
+            nonlocal captured_callback
+            captured_callback = kwargs.get("progress_callback")
+
+        with (
+            patch("yt_audio_cli.cli.transcode", side_effect=capture_callback),
+            patch(
+                "yt_audio_cli.cli.create_conversion_progress",
+                return_value=mock_progress,
+            ),
+        ):
+            _convert_audio(result, Path(temp_dir), "mp3", 320, True)
+
+            # Call the callback
+            assert captured_callback is not None  # NOSONAR - modified by closure
+            captured_callback(60.0)
+            mock_progress.update.assert_called_with(1, completed=60.0)

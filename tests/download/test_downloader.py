@@ -28,7 +28,7 @@ class TestDownloadResult:
         assert result.success is True
         assert result.error is None
         assert result.title == "Test Video"
-        assert result.duration == 212.5  # NOSONAR
+        assert result.duration == 212.5  # NOSONAR - exact float from test setup
 
     def test_create_failure_result(self) -> None:
         """Test creating a failed download result."""
@@ -170,9 +170,7 @@ class TestDownload:
             assert result.success is True
             assert result.title == "Test Video Title"
             assert result.artist == "Test Channel"
-            assert (
-                result.duration == 212.0
-            )  # Duration extracted from metadata # NOSONAR
+            assert result.duration == 212.0  # NOSONAR - exact float from mock metadata
             assert mock_popen.called
             # Verify progress was reported
             assert len(progress_calls) == 3
@@ -204,7 +202,7 @@ class TestDownload:
             )
 
             assert result.success is True
-            assert result.duration == 180.5  # NOSONAR
+            assert result.duration == 180.5  # NOSONAR - exact float from mock metadata
 
     def test_duration_none_when_not_in_metadata(
         self, temp_dir: Path, mock_yt_dlp_success: dict
@@ -534,7 +532,7 @@ class TestExtractMetadata:
 
             assert result is not None
             assert result["title"] == "Test Video"
-            assert result["duration"] == 180.5
+            assert result["duration"] == 180.5  # NOSONAR - exact float from mock
 
     def test_extract_metadata_failure(self) -> None:
         """Test metadata extraction failure returns None."""

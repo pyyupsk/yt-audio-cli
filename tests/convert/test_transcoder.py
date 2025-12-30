@@ -367,7 +367,7 @@ class TestProcessFFmpegProgress:
         _process_ffmpeg_progress(mock_process, callback)
 
         assert len(progress_values) == 1
-        assert progress_values[0] == 5.0  # NOSONAR
+        assert progress_values[0] == 5.0  # NOSONAR - exact float from parsed output
 
     def test_parse_multiple_progress_updates(self) -> None:
         """Test parsing multiple progress updates."""
