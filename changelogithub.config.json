@@ -1,0 +1,14 @@
+{
+  "types": {
+    "feat": { "title": "🚀 Features", "semver": "minor" },
+    "fix": { "title": "🐛 Bug Fixes", "semver": "patch" },
+    "perf": { "title": "⚡ Performance", "semver": "patch" },
+    "refactor": { "title": "🔧 Refactors", "semver": "patch" },
+    "docs": { "title": "📖 Documentation" },
+    "chore": { "title": "🏡 Chores" },
+    "test": { "title": "✅ Tests" },
+    "ci": { "title": "🤖 CI" },
+    "build": { "title": "📦 Build" },
+    "style": { "title": "🎨 Styles" }
+  }
+}
