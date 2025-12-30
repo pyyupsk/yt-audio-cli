@@ -146,7 +146,7 @@ Check your internet connection and verify the URL is correct. If the issue persi
 ```python
 __metadata__ = {
     "name": "yt-audio-cli",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "author": "pyyupsk",
     "license": "MIT",
     "python": ">=3.12",

@@ -78,7 +78,7 @@ body:
     attributes:
       label: yt-audio-cli Version
       description: "Output of `yt-audio --version`"
-      placeholder: "0.1.0"
+      placeholder: "0.1.1"
     validations:
       required: true
 
