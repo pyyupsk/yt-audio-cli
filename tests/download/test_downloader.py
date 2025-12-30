@@ -477,6 +477,32 @@ class TestExtractPlaylistWithMetadata:
 
             assert result == []
 
+    def test_handles_none_entries(self) -> None:
+        """Test that None entries are skipped."""
+        from yt_audio_cli.download.downloader import extract_playlist_with_metadata
+
+        mock_info = {
+            "entries": [
+                None,
+                {
+                    "url": "https://youtube.com/watch?v=video1",
+                    "title": "Video 1",
+                    "_type": "url",
+                },
+                None,
+            ]
+        }
+
+        mock_ydl = _create_mock_ydl(mock_info)
+
+        with patch("yt_audio_cli.download.downloader.YoutubeDL", return_value=mock_ydl):
+            result = extract_playlist_with_metadata(
+                "https://youtube.com/playlist?list=test"
+            )
+
+            assert len(result) == 1
+            assert result[0].title == "Video 1"
+
 
 class TestExtractMetadata:
     """Tests for extract_metadata() function."""
@@ -575,6 +601,16 @@ class TestPlaylistDetection:
         from yt_audio_cli.download.downloader import is_playlist
 
         assert is_playlist("ftp://youtube.com/playlist?list=test") is False
+
+    def test_urlparse_exception_returns_false(self) -> None:
+        """Test URL that causes urlparse exception returns False."""
+        from yt_audio_cli.download.downloader import is_playlist
+
+        with patch(
+            "yt_audio_cli.download.downloader.urlparse",
+            side_effect=ValueError("parse error"),
+        ):
+            assert is_playlist("https://youtube.com/playlist?list=test") is False
 
 
 class TestProgressHook:
