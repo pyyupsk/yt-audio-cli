@@ -26,6 +26,14 @@ _CODEC_MAP = {
     "wav": "pcm_s16le",
 }
 
+# FFmpeg format mapping (used with -f flag)
+_FORMAT_MAP = {
+    "mp3": "mp3",
+    "aac": "adts",
+    "opus": "opus",
+    "wav": "wav",
+}
+
 
 def check_ffmpeg() -> bool:
     """Check if FFmpeg is available on PATH.
@@ -89,6 +97,10 @@ def _build_ffmpeg_command(
 
     if bitrate and audio_format != "wav":
         cmd.extend(["-b:a", f"{bitrate}k"])
+
+    output_format = _FORMAT_MAP.get(audio_format)
+    if output_format:
+        cmd.extend(["-f", output_format])
 
     if metadata:
         for key, value in metadata.items():
