@@ -127,6 +127,14 @@ def process_single_url(
                 print_error(f"Download failed: {result.error}")
                 return False
 
+            # Verify downloaded file exists
+            if not result.temp_path.exists():
+                progress.stop()
+                print_error(
+                    f"Download failed: Temporary file not found at {result.temp_path}"
+                )
+                return False
+
             progress.update(task_id, description="Converting...")
 
             # Prepare output path

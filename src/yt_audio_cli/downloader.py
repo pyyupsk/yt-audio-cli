@@ -189,14 +189,11 @@ def _clean_error_message(stderr: str) -> str:
 
 
 def _build_yt_dlp_command(url: str, output_template: str) -> list[str]:
-    """Build yt-dlp command for audio extraction."""
+    """Build yt-dlp command for audio download."""
     return [
         "yt-dlp",
-        "--extract-audio",
-        "--audio-format",
-        "best",
-        "--audio-quality",
-        "0",
+        "-f",
+        "bestaudio/best",  # Download best audio stream, fallback to best
         "--output",
         output_template,
         "--print-json",
