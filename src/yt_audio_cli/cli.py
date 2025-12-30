@@ -14,7 +14,8 @@ from yt_audio_cli.downloader import download, extract_playlist, is_playlist
 from yt_audio_cli.errors import FFmpegNotFoundError, format_error
 from yt_audio_cli.filename import resolve_conflict, sanitize
 from yt_audio_cli.progress import (
-    create_progress,
+    create_conversion_progress,
+    create_download_progress,
     print_error,
     print_info,
     print_success,
@@ -107,35 +108,40 @@ def process_single_url(
     Returns:
         True if download and conversion succeeded.
     """
-    with create_progress() as progress:
-        # Add download task
-        task_id = progress.add_task("Downloading...", total=None)
+    with tempfile.TemporaryDirectory() as temp_dir:
+        with create_download_progress() as download_progress:
+            task_id = download_progress.add_task("Downloading...", total=None)
 
-        def progress_callback(downloaded: int, total: int) -> None:
-            progress.update(task_id, completed=downloaded, total=total)
+            def download_callback(downloaded: int, total: int) -> None:
+                if total > 0:
+                    download_progress.update(task_id, completed=downloaded, total=total)
+                else:
+                    download_progress.update(task_id, completed=downloaded)
 
-        # Download audio
-        with tempfile.TemporaryDirectory() as temp_dir:
             result = download(
                 url=url,
-                progress_callback=progress_callback,
+                progress_callback=download_callback,
                 output_dir=Path(temp_dir),
             )
 
-            if not result.success:
-                progress.stop()
-                print_error(f"Download failed: {result.error}")
-                return False
+        if not result.success:
+            print_error(f"Download failed: {result.error}")
+            return False
 
-            # Verify downloaded file exists
-            if not result.temp_path.exists():
-                progress.stop()
-                print_error(
-                    f"Download failed: Temporary file not found at {result.temp_path}"
-                )
-                return False
+        if not result.temp_path.exists():
+            print_error(
+                f"Download failed: Temporary file not found at {result.temp_path}"
+            )
+            return False
 
-            progress.update(task_id, description="Converting...")
+        with create_conversion_progress() as convert_progress:
+            convert_task = convert_progress.add_task(
+                "Converting...",
+                total=result.duration,
+            )
+
+            def convert_callback(processed_seconds: float) -> None:
+                convert_progress.update(convert_task, completed=processed_seconds)
 
             # Prepare output path
             filename = sanitize(result.title)
@@ -150,7 +156,6 @@ def process_single_url(
                     "artist": result.artist,
                 }
 
-            # Transcode
             try:
                 transcode(
                     input_path=result.temp_path,
@@ -159,13 +164,12 @@ def process_single_url(
                     bitrate=bitrate,
                     embed_metadata=embed_metadata,
                     metadata=metadata,
+                    progress_callback=convert_callback,
                 )
             except FFmpegNotFoundError:
-                progress.stop()
                 print_error(format_error(FFmpegNotFoundError()))
                 return False
             except Exception as e:
-                progress.stop()
                 print_error(format_error(e))
                 return False
 

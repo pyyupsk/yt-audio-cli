@@ -24,6 +24,7 @@ class DownloadResult:
         title: The video title.
         artist: The video artist/channel name.
         temp_path: Path to the downloaded temporary file.
+        duration: Media duration in seconds (None if unavailable).
         success: Whether the download succeeded.
         error: Error message if download failed.
     """
@@ -32,6 +33,7 @@ class DownloadResult:
     title: str
     artist: str
     temp_path: Path
+    duration: float | None
     success: bool
     error: str | None = None
 
@@ -148,6 +150,7 @@ def _create_error_result(url: str, error: str) -> DownloadResult:
         title="",
         artist="",
         temp_path=Path(),
+        duration=None,
         success=False,
         error=error,
     )
@@ -198,9 +201,10 @@ def _build_yt_dlp_command(url: str, output_template: str) -> list[str]:
         output_template,
         "--print-json",
         "--no-playlist",
+        "--progress",
         "--newline",
         "--progress-template",
-        "%(progress)j",
+        "download:%(progress)j",
         url,
     ]
 
@@ -235,6 +239,7 @@ def download(
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            bufsize=1,
         ) as process:
             stdout_lines, json_output = _process_stdout(process, progress_callback)
 
@@ -250,6 +255,10 @@ def download(
             if json_output is None:
                 return _create_error_result(url, "Failed to parse yt-dlp output")
 
+            duration = json_output.get("duration")
+            if duration is not None:
+                duration = float(duration)
+
             return DownloadResult(
                 url=url,
                 title=json_output.get("title", "Unknown"),
@@ -257,6 +266,7 @@ def download(
                     "uploader", json_output.get("channel", "Unknown")
                 ),
                 temp_path=_extract_file_path(json_output, output_dir),
+                duration=duration,
                 success=True,
                 error=None,
             )
@@ -282,7 +292,11 @@ def _process_stdout(
     if not process.stdout:
         return stdout_lines, json_output
 
-    for line in process.stdout:
+    while True:
+        line = process.stdout.readline()
+        if not line:
+            break
+
         line = line.strip()
         if not line:
             continue

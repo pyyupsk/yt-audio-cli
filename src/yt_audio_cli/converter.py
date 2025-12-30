@@ -5,8 +5,12 @@ from __future__ import annotations
 import shutil
 import subprocess  # nosec B404
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from yt_audio_cli.errors import ConversionError, FFmpegNotFoundError
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 def check_ffmpeg() -> bool:
@@ -18,6 +22,34 @@ def check_ffmpeg() -> bool:
     return shutil.which("ffmpeg") is not None
 
 
+def _process_ffmpeg_progress(
+    process: subprocess.Popen[str],
+    callback: Callable[[float], None],
+) -> None:
+    """Parse FFmpeg progress output and invoke callback.
+
+    FFmpeg outputs progress in key=value format when using -progress pipe:1.
+    The out_time_ms field contains the processed time in microseconds.
+
+    Args:
+        process: The FFmpeg subprocess with stdout pipe.
+        callback: Callback function that receives processed time in seconds.
+    """
+    if not process.stdout:
+        return
+
+    for line in process.stdout:
+        line = line.strip()
+        if line.startswith("out_time_ms="):
+            try:
+                microseconds = int(line.split("=")[1])
+                if microseconds >= 0:
+                    seconds = microseconds / 1_000_000
+                    callback(seconds)
+            except (ValueError, IndexError):
+                pass
+
+
 def transcode(
     input_path: Path,
     output_path: Path,
@@ -25,6 +57,7 @@ def transcode(
     bitrate: int | None = None,
     embed_metadata: bool = True,
     metadata: dict[str, str] | None = None,
+    progress_callback: Callable[[float], None] | None = None,
 ) -> bool:
     """Transcode audio file via FFmpeg.
 
@@ -35,6 +68,8 @@ def transcode(
         bitrate: Target bitrate in kbps. None for default/lossless.
         embed_metadata: Whether to embed metadata in the output file.
         metadata: Dictionary of metadata tags (title, artist, etc.).
+        progress_callback: Optional callback for progress updates.
+            Takes processed_seconds (float) as argument.
 
     Returns:
         True if transcoding succeeded.
@@ -46,7 +81,12 @@ def transcode(
     if not check_ffmpeg():
         raise FFmpegNotFoundError
 
-    cmd = ["ffmpeg", "-y", "-i", str(input_path)]
+    cmd = ["ffmpeg", "-y"]
+
+    if progress_callback:
+        cmd.extend(["-progress", "pipe:1", "-nostats"])
+
+    cmd.extend(["-i", str(input_path)])
 
     # Add codec based on format
     codec_map = {
@@ -76,15 +116,28 @@ def transcode(
     cmd.append(str(output_path))
 
     try:
-        result = subprocess.run(  # nosec B603
-            cmd,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        if progress_callback:
+            with subprocess.Popen(  # nosec B603
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            ) as process:
+                _process_ffmpeg_progress(process, progress_callback)
+                process.wait()
+                stderr = process.stderr.read() if process.stderr else ""
+                if process.returncode != 0:
+                    raise ConversionError(str(input_path), stderr or "Unknown error")
+        else:
+            result = subprocess.run(  # nosec B603
+                cmd,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
 
-        if result.returncode != 0:
-            raise ConversionError(str(input_path), result.stderr or "Unknown error")
+            if result.returncode != 0:
+                raise ConversionError(str(input_path), result.stderr or "Unknown error")
 
         return True
 

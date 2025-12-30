@@ -7,15 +7,63 @@ from rich.progress import (
     BarColumn,
     DownloadColumn,
     Progress,
+    ProgressColumn,
     SpinnerColumn,
+    Task,
     TaskID,
+    TaskProgressColumn,
     TextColumn,
+    TimeElapsedColumn,
     TimeRemainingColumn,
     TransferSpeedColumn,
 )
+from rich.text import Text
 
 # Global console instance for consistent output
 console = Console()
+
+
+class TimeProgressColumn(ProgressColumn):
+    """Display time progress as elapsed / total (e.g., '0:45 / 3:20').
+
+    For conversion progress, displays processed time vs total duration.
+    When total is None or 0, shows only elapsed time.
+    """
+
+    def render(self, task: Task) -> Text:
+        """Render the time progress column.
+
+        Args:
+            task: The Rich Task to render progress for.
+
+        Returns:
+            Text object with formatted time progress.
+        """
+        elapsed = task.completed or 0
+
+        if task.total is None or task.total == 0:
+            return Text(self._format_time(elapsed), style="progress.elapsed")
+
+        return Text(
+            f"{self._format_time(elapsed)} / {self._format_time(task.total)}",
+            style="progress.elapsed",
+        )
+
+    def _format_time(self, seconds: float) -> str:
+        """Format seconds as M:SS or H:MM:SS.
+
+        Args:
+            seconds: Time in seconds to format.
+
+        Returns:
+            Formatted time string.
+        """
+        total_secs = int(seconds)
+        minutes, secs = divmod(total_secs, 60)
+        hours, minutes = divmod(minutes, 60)
+        if hours:
+            return f"{hours}:{minutes:02d}:{secs:02d}"
+        return f"{minutes}:{secs:02d}"
 
 
 def create_progress() -> Progress:
@@ -23,6 +71,9 @@ def create_progress() -> Progress:
 
     Returns:
         Configured Progress instance.
+
+    Note:
+        Deprecated. Use create_download_progress() or create_conversion_progress().
     """
     return Progress(
         SpinnerColumn(),
@@ -31,6 +82,47 @@ def create_progress() -> Progress:
         DownloadColumn(),
         TransferSpeedColumn(),
         TimeRemainingColumn(),
+        console=console,
+        transient=True,
+    )
+
+
+def create_download_progress() -> Progress:
+    """Create Rich progress display for download phase (byte-based).
+
+    Displays: spinner, description, progress bar, downloaded/total bytes,
+    transfer speed, and estimated time remaining.
+
+    Returns:
+        Configured Progress instance for download operations.
+    """
+    return Progress(
+        SpinnerColumn(),
+        TextColumn("[bold blue]{task.description}"),
+        BarColumn(),
+        DownloadColumn(),
+        TransferSpeedColumn(),
+        TimeRemainingColumn(),
+        console=console,
+        transient=True,
+    )
+
+
+def create_conversion_progress() -> Progress:
+    """Create Rich progress display for conversion phase (time-based).
+
+    Displays: spinner, description, progress bar, processed/total time,
+    and percentage complete.
+
+    Returns:
+        Configured Progress instance for conversion operations.
+    """
+    return Progress(
+        SpinnerColumn(),
+        TextColumn("[bold blue]{task.description}"),
+        BarColumn(),
+        TimeProgressColumn(),
+        TaskProgressColumn(),
         console=console,
         transient=True,
     )

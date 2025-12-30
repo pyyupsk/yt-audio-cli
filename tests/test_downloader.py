@@ -21,12 +21,14 @@ class TestDownloadResult:
             title="Test Video",
             artist="Test Channel",
             temp_path=Path("/tmp/test.webm"),
+            duration=212.5,
             success=True,
             error=None,
         )
         assert result.success is True
         assert result.error is None
         assert result.title == "Test Video"
+        assert result.duration == 212.5
 
     def test_create_failure_result(self) -> None:
         """Test creating a failed download result."""
@@ -37,11 +39,29 @@ class TestDownloadResult:
             title="",
             artist="",
             temp_path=Path("/tmp/test.webm"),
+            duration=None,
             success=False,
             error="Video unavailable",
         )
         assert result.success is False
         assert result.error == "Video unavailable"
+        assert result.duration is None
+
+    def test_duration_can_be_none(self) -> None:
+        """Test that duration can be None for unknown duration."""
+        from yt_audio_cli.downloader import DownloadResult
+
+        result = DownloadResult(
+            url="https://youtube.com/watch?v=test",
+            title="Live Stream",
+            artist="Test Channel",
+            temp_path=Path("/tmp/test.webm"),
+            duration=None,
+            success=True,
+            error=None,
+        )
+        assert result.success is True
+        assert result.duration is None
 
 
 class TestParseProgressLine:
@@ -90,9 +110,13 @@ def _create_mock_popen(
     stdout_lines: list[str], stderr: str = "", returncode: int = 0
 ) -> MagicMock:
     """Create a mock Popen object for testing."""
+    import io
+
     mock_process = MagicMock()
     mock_process.returncode = returncode
-    mock_process.stdout = iter(line + "\n" for line in stdout_lines)
+    # Use StringIO for file-like object with readline() support
+    stdout_content = "\n".join(stdout_lines) + "\n" if stdout_lines else ""
+    mock_process.stdout = io.StringIO(stdout_content)
     mock_process.stderr = MagicMock()
     mock_process.stderr.read.return_value = stderr
     mock_process.wait.return_value = returncode
@@ -146,11 +170,66 @@ class TestDownload:
             assert result.success is True
             assert result.title == "Test Video Title"
             assert result.artist == "Test Channel"
+            assert result.duration == 212.0  # Duration extracted from metadata
             assert mock_popen.called
             # Verify progress was reported
             assert len(progress_calls) == 3
             assert progress_calls[0] == (1024, 4096)
             assert progress_calls[-1] == (4096, 4096)
+
+    def test_duration_extraction_from_metadata(
+        self, temp_dir: Path, mock_yt_dlp_success: dict
+    ) -> None:
+        """Test that duration is extracted from yt-dlp metadata."""
+        from yt_audio_cli.downloader import download
+
+        # Create a mock temp file
+        temp_file = temp_dir / "test_video.webm"
+        temp_file.touch()
+
+        mock_yt_dlp_success["requested_downloads"][0]["filepath"] = str(temp_file)
+        mock_yt_dlp_success["duration"] = 180.5  # Set specific duration
+
+        stdout_lines = [json.dumps(mock_yt_dlp_success)]
+
+        with patch("subprocess.Popen") as mock_popen:
+            mock_popen.return_value = _create_mock_popen(stdout_lines)
+
+            result = download(
+                "https://youtube.com/watch?v=test",
+                progress_callback=lambda d, t: None,
+                output_dir=temp_dir,
+            )
+
+            assert result.success is True
+            assert result.duration == 180.5
+
+    def test_duration_none_when_not_in_metadata(
+        self, temp_dir: Path, mock_yt_dlp_success: dict
+    ) -> None:
+        """Test that duration is None when not in metadata."""
+        from yt_audio_cli.downloader import download
+
+        # Create a mock temp file
+        temp_file = temp_dir / "test_video.webm"
+        temp_file.touch()
+
+        mock_yt_dlp_success["requested_downloads"][0]["filepath"] = str(temp_file)
+        del mock_yt_dlp_success["duration"]  # Remove duration
+
+        stdout_lines = [json.dumps(mock_yt_dlp_success)]
+
+        with patch("subprocess.Popen") as mock_popen:
+            mock_popen.return_value = _create_mock_popen(stdout_lines)
+
+            result = download(
+                "https://youtube.com/watch?v=live",
+                progress_callback=lambda d, t: None,
+                output_dir=temp_dir,
+            )
+
+            assert result.success is True
+            assert result.duration is None
 
     def test_download_invalid_url(self, temp_dir: Path) -> None:
         """Test download with invalid URL."""
