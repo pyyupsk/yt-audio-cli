@@ -1,7 +1,7 @@
 [project]
 name = "yt-audio-cli"
 version = "0.1.0"
-description = "Download audio from video URLs and save locally in common audio formats"
+description = "A simple command-line tool for downloading audio from YouTube and other sites"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = ["rich>=14.2.0", "typer>=0.21.0", "yt-dlp>=2025.12.8"]

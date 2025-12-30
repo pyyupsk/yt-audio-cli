@@ -1,4 +1,4 @@
-"""YouTube Audio CLI - Download audio from video URLs."""
+"""A simple command-line tool for downloading audio from YouTube and other sites."""
 
 from yt_audio_cli.errors import ConversionError, DownloadError, FFmpegNotFoundError
 

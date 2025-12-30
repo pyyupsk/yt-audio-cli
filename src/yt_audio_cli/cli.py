@@ -41,7 +41,7 @@ QUALITY_PRESETS = {
 # Create Typer app
 app = typer.Typer(
     name="yt-audio-cli",
-    help="Download audio from video URLs and save locally in common audio formats.",
+    help="A simple command-line tool for downloading audio from YouTube and other sites.",
     add_completion=False,
     no_args_is_help=True,
 )
