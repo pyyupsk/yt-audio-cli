@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import tempfile
 from pathlib import Path
 from typing import Annotated
@@ -186,8 +187,10 @@ def _convert_audio(
         def callback(processed_seconds: float) -> None:
             progress.update(task_id, completed=processed_seconds)
 
-        output_path = output_dir / f"{sanitize(result.title)}.{audio_format}"
-        output_path = resolve_conflict(output_path)
+        final_output_path = output_dir / f"{sanitize(result.title)}.{audio_format}"
+        final_output_path = resolve_conflict(final_output_path)
+
+        temp_output_path = output_dir / f".{sanitize(result.title)}.{audio_format}.tmp"
 
         metadata = (
             {"title": result.title, "artist": result.artist} if embed_metadata else {}
@@ -196,18 +199,25 @@ def _convert_audio(
         try:
             transcode(
                 input_path=result.temp_path,
-                output_path=output_path,
+                output_path=temp_output_path,
                 audio_format=audio_format,
                 bitrate=bitrate,
                 embed_metadata=embed_metadata,
                 metadata=metadata,
                 progress_callback=callback,
             )
-            return output_path
+            if final_output_path.exists():
+                final_output_path = resolve_conflict(final_output_path)
+            temp_output_path.replace(final_output_path)
+            return final_output_path
         except FFmpegNotFoundError:
             print_error(format_error(FFmpegNotFoundError()))
         except Exception as e:
             print_error(format_error(e))
+        finally:
+            if temp_output_path.exists():
+                with contextlib.suppress(OSError):
+                    temp_output_path.unlink()
         return None
 
 
@@ -230,8 +240,9 @@ def process_single_url(
     Returns:
         True if download and conversion succeeded.
     """
-    with tempfile.TemporaryDirectory() as temp_dir:
-        result = _download_audio(url, Path(temp_dir))
+    with tempfile.TemporaryDirectory() as temp_dir_str:
+        temp_dir = Path(temp_dir_str)
+        result = _download_audio(url, temp_dir)
 
         if not result.success:
             print_error(f"Download failed: {result.error}")
@@ -249,8 +260,8 @@ def process_single_url(
         if output_path is None:
             return False
 
-    print_success(f"Saved: {output_path}")
-    return True
+        print_success(f"Saved: {output_path}")
+        return True
 
 
 def expand_playlist_urls(urls: list[str]) -> list[PlaylistEntry]:

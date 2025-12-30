@@ -558,3 +558,180 @@ class TestTranscodeWithProgressCallback:
                 )
 
                 assert progress_values == [1.0, 2.0, 3.0]
+
+
+class TestProcessFFmpegProgressEdgeCases:
+    """Additional edge case tests for _process_ffmpeg_progress()."""
+
+    def test_ignores_duration_exceeding_max(self) -> None:
+        """Test that extremely large durations are ignored."""
+        # MAX_DURATION_SECONDS is 86400 (24 hours), so test with 100000 seconds
+        # 100000 seconds = 100,000,000,000 microseconds
+        progress_output = [
+            "out_time_ms=100000000000000\n",  # Way over 24 hours
+            "out_time_ms=5000000\n",  # Valid: 5 seconds
+        ]
+
+        mock_process = MagicMock()
+        mock_process.stdout = iter(progress_output)
+
+        progress_values: list[float] = []
+
+        _process_ffmpeg_progress(mock_process, lambda s: progress_values.append(s))
+
+        # Only the valid 5-second value should be captured
+        assert len(progress_values) == 1
+        assert progress_values[0] == 5.0
+
+
+class TestTranscodeMetadataEdgeCases:
+    """Tests for metadata handling edge cases in transcode()."""
+
+    @pytest.fixture
+    def input_file(self, temp_dir: Path) -> Path:
+        """Create a mock input file."""
+        input_path = temp_dir / "input.webm"
+        input_path.touch()
+        return input_path
+
+    def test_skips_empty_metadata_values(
+        self, temp_dir: Path, input_file: Path, mock_subprocess_success: MagicMock
+    ) -> None:
+        """Test that empty metadata values are skipped."""
+        output_path = temp_dir / "output.mp3"
+
+        with patch("shutil.which", return_value="/usr/bin/ffmpeg"):
+            with patch("subprocess.run") as mock_run:
+                mock_run.return_value = mock_subprocess_success
+
+                result = transcode(
+                    input_path=input_file,
+                    output_path=output_path,
+                    audio_format="mp3",
+                    bitrate=320,
+                    embed_metadata=True,
+                    metadata={"title": "Test Song", "artist": "", "album": ""},
+                )
+
+                assert result is True
+                cmd = mock_run.call_args[0][0]
+                cmd_str = " ".join(cmd)
+                # Title should be present
+                assert "title=Test Song" in cmd_str
+                # Empty artist and album should NOT create metadata flags
+                # Count occurrences of -metadata
+                metadata_count = cmd_str.count("-metadata")
+                assert metadata_count == 1  # Only title
+
+
+class TestTranscodeErrorHandling:
+    """Tests for error handling in transcode()."""
+
+    @pytest.fixture
+    def input_file(self, temp_dir: Path) -> Path:
+        """Create a mock input file."""
+        input_path = temp_dir / "input.webm"
+        input_path.touch()
+        return input_path
+
+    def test_run_with_progress_raises_conversion_error(
+        self, temp_dir: Path, input_file: Path
+    ) -> None:
+        """Test that _run_with_progress raises ConversionError on failure."""
+        output_path = temp_dir / "output.mp3"
+
+        mock_process = MagicMock()
+        mock_process.returncode = 1
+        mock_process.stdout = iter([])
+        mock_process.stderr = MagicMock()
+        mock_process.stderr.read.return_value = "FFmpeg error occurred"
+        mock_process.wait.return_value = 1
+        mock_process.__enter__ = MagicMock(return_value=mock_process)
+        mock_process.__exit__ = MagicMock(return_value=False)
+
+        with patch("shutil.which", return_value="/usr/bin/ffmpeg"):
+            with patch("subprocess.Popen", return_value=mock_process):
+                with pytest.raises(ConversionError) as exc_info:
+                    transcode(
+                        input_path=input_file,
+                        output_path=output_path,
+                        audio_format="mp3",
+                        bitrate=320,
+                        progress_callback=lambda s: None,
+                    )
+
+                assert "FFmpeg error" in str(exc_info.value)
+
+    def test_transcode_subprocess_error(self, temp_dir: Path, input_file: Path) -> None:
+        """Test transcode handles SubprocessError."""
+        from subprocess import SubprocessError
+
+        output_path = temp_dir / "output.mp3"
+
+        with patch("shutil.which", return_value="/usr/bin/ffmpeg"):
+            with patch("subprocess.run") as mock_run:
+                mock_run.side_effect = SubprocessError("Process failed")
+
+                with pytest.raises(ConversionError) as exc_info:
+                    transcode(
+                        input_path=input_file,
+                        output_path=output_path,
+                        audio_format="mp3",
+                    )
+
+                assert "Process failed" in str(exc_info.value)
+
+    def test_transcode_file_not_found_error(
+        self, temp_dir: Path, input_file: Path
+    ) -> None:
+        """Test transcode handles FileNotFoundError during execution."""
+        output_path = temp_dir / "output.mp3"
+
+        with patch("shutil.which", return_value="/usr/bin/ffmpeg"):
+            with patch("subprocess.run") as mock_run:
+                mock_run.side_effect = FileNotFoundError("ffmpeg not found")
+
+                with pytest.raises(FFmpegNotFoundError):
+                    transcode(
+                        input_path=input_file,
+                        output_path=output_path,
+                        audio_format="mp3",
+                    )
+
+
+class TestBuildFFmpegCommand:
+    """Tests for _build_ffmpeg_command() helper function."""
+
+    def test_unknown_format_has_no_codec(self) -> None:
+        """Test that unknown format doesn't add codec to command."""
+        from yt_audio_cli.convert.transcoder import _build_ffmpeg_command
+
+        cmd = _build_ffmpeg_command(
+            input_path=Path("/tmp/input.webm"),
+            output_path=Path("/tmp/output.unknown"),
+            audio_format="unknown_format",
+            bitrate=320,
+            metadata=None,
+            with_progress=False,
+        )
+
+        cmd_str = " ".join(cmd)
+        # Should not contain -c:a since format is unknown
+        assert "-c:a" not in cmd_str
+
+    def test_unknown_format_has_no_format_flag(self) -> None:
+        """Test that unknown format doesn't add -f flag."""
+        from yt_audio_cli.convert.transcoder import _build_ffmpeg_command
+
+        cmd = _build_ffmpeg_command(
+            input_path=Path("/tmp/input.webm"),
+            output_path=Path("/tmp/output.unknown"),
+            audio_format="unknown_format",
+            bitrate=None,
+            metadata=None,
+            with_progress=False,
+        )
+
+        cmd_str = " ".join(cmd)
+        # Should not contain -f flag since format is unknown
+        assert " -f " not in cmd_str

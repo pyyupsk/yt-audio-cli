@@ -7,6 +7,7 @@ install:
 # Install all dependencies including dev
 dev:
 	uv sync
+	uv run pre-commit install
 
 # Run linter
 lint:

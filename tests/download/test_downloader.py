@@ -615,3 +615,401 @@ class TestPlaylistDetection:
         # This could go either way - let's treat it as a playlist
         result = is_playlist(url)
         assert isinstance(result, bool)
+
+    def test_empty_url_returns_false(self) -> None:
+        """Test empty URL returns False."""
+        from yt_audio_cli.download.downloader import is_playlist
+
+        assert is_playlist("") is False
+        assert is_playlist(None) is False  # type: ignore[arg-type]
+
+    def test_non_string_url_returns_false(self) -> None:
+        """Test non-string URL returns False."""
+        from yt_audio_cli.download.downloader import is_playlist
+
+        assert is_playlist(123) is False  # type: ignore[arg-type]
+
+    def test_url_without_scheme_returns_false(self) -> None:
+        """Test URL without scheme returns False."""
+        from yt_audio_cli.download.downloader import is_playlist
+
+        assert is_playlist("youtube.com/playlist?list=test") is False
+
+    def test_non_http_scheme_returns_false(self) -> None:
+        """Test non-HTTP scheme returns False."""
+        from yt_audio_cli.download.downloader import is_playlist
+
+        assert is_playlist("ftp://youtube.com/playlist?list=test") is False
+
+
+class TestExtractPlaylistWithMetadata:
+    """Tests for extract_playlist_with_metadata() function."""
+
+    def test_successful_extraction(self) -> None:
+        """Test successful extraction with titles."""
+        from yt_audio_cli.download.downloader import extract_playlist_with_metadata
+
+        entries = [
+            {
+                "id": "video1",
+                "url": "https://youtube.com/watch?v=video1",
+                "title": "Video 1 Title",
+                "_type": "url",
+            },
+            {
+                "id": "video2",
+                "url": "https://youtube.com/watch?v=video2",
+                "title": "Video 2 Title",
+                "_type": "url",
+            },
+        ]
+        mock_output = "\n".join(json.dumps(entry) for entry in entries)
+
+        with patch("subprocess.run") as mock_run:
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+            mock_result.stdout = mock_output
+            mock_result.stderr = ""
+            mock_run.return_value = mock_result
+
+            result = extract_playlist_with_metadata(
+                "https://youtube.com/playlist?list=test"
+            )
+
+            assert len(result) == 2
+            assert result[0].url == "https://youtube.com/watch?v=video1"
+            assert result[0].title == "Video 1 Title"
+            assert result[1].title == "Video 2 Title"
+
+    def test_skips_video_type_entries(self) -> None:
+        """Test that video type entries are skipped."""
+        from yt_audio_cli.download.downloader import extract_playlist_with_metadata
+
+        entries = [
+            {
+                "id": "video1",
+                "url": "https://youtube.com/watch?v=video1",
+                "title": "Video 1",
+                "_type": "video",
+            },
+        ]
+        mock_output = json.dumps(entries[0])
+
+        with patch("subprocess.run") as mock_run:
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+            mock_result.stdout = mock_output
+            mock_result.stderr = ""
+            mock_run.return_value = mock_result
+
+            result = extract_playlist_with_metadata(
+                "https://youtube.com/playlist?list=test"
+            )
+
+            assert len(result) == 0
+
+    def test_uses_webpage_url_fallback(self) -> None:
+        """Test fallback to webpage_url when url is missing."""
+        from yt_audio_cli.download.downloader import extract_playlist_with_metadata
+
+        entries = [
+            {
+                "id": "video1",
+                "webpage_url": "https://youtube.com/watch?v=video1",
+                "title": "Video 1",
+                "_type": "url",
+            },
+        ]
+        mock_output = json.dumps(entries[0])
+
+        with patch("subprocess.run") as mock_run:
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+            mock_result.stdout = mock_output
+            mock_result.stderr = ""
+            mock_run.return_value = mock_result
+
+            result = extract_playlist_with_metadata(
+                "https://youtube.com/playlist?list=test"
+            )
+
+            assert len(result) == 1
+            assert "video1" in result[0].url
+
+    def test_skips_entries_without_url(self) -> None:
+        """Test that entries without URL are skipped."""
+        from yt_audio_cli.download.downloader import extract_playlist_with_metadata
+
+        entries = [{"id": "video1", "title": "Video 1", "_type": "url"}]
+        mock_output = json.dumps(entries[0])
+
+        with patch("subprocess.run") as mock_run:
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+            mock_result.stdout = mock_output
+            mock_result.stderr = ""
+            mock_run.return_value = mock_result
+
+            result = extract_playlist_with_metadata(
+                "https://youtube.com/playlist?list=test"
+            )
+
+            assert len(result) == 0
+
+    def test_handles_subprocess_error(self) -> None:
+        """Test handling of subprocess errors."""
+        from subprocess import SubprocessError
+
+        from yt_audio_cli.download.downloader import extract_playlist_with_metadata
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.side_effect = SubprocessError("Failed")
+
+            result = extract_playlist_with_metadata(
+                "https://youtube.com/playlist?list=test"
+            )
+
+            assert result == []
+
+    def test_handles_file_not_found(self) -> None:
+        """Test handling when yt-dlp not installed."""
+        from yt_audio_cli.download.downloader import extract_playlist_with_metadata
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.side_effect = FileNotFoundError("yt-dlp not found")
+
+            result = extract_playlist_with_metadata(
+                "https://youtube.com/playlist?list=test"
+            )
+
+            assert result == []
+
+    def test_handles_failed_returncode(self) -> None:
+        """Test handling of non-zero return code."""
+        from yt_audio_cli.download.downloader import extract_playlist_with_metadata
+
+        with patch("subprocess.run") as mock_run:
+            mock_result = MagicMock()
+            mock_result.returncode = 1
+            mock_result.stdout = ""
+            mock_result.stderr = "Error"
+            mock_run.return_value = mock_result
+
+            result = extract_playlist_with_metadata(
+                "https://youtube.com/playlist?list=test"
+            )
+
+            assert result == []
+
+
+class TestFindMetadataInLines:
+    """Tests for _find_metadata_in_lines() helper function."""
+
+    def test_finds_metadata_in_lines(self) -> None:
+        """Test finding metadata in collected lines."""
+        from yt_audio_cli.download.downloader import _find_metadata_in_lines
+
+        lines = [
+            '{"downloaded_bytes": 1024}',
+            '{"id": "test123", "title": "Test Video"}',
+            "some other line",
+        ]
+
+        result = _find_metadata_in_lines(lines)
+
+        assert result is not None
+        assert result["id"] == "test123"
+
+    def test_returns_none_when_no_metadata(self) -> None:
+        """Test returns None when no metadata found."""
+        from yt_audio_cli.download.downloader import _find_metadata_in_lines
+
+        lines = [
+            '{"downloaded_bytes": 1024}',
+            "not json at all",
+        ]
+
+        result = _find_metadata_in_lines(lines)
+
+        assert result is None
+
+    def test_returns_none_for_empty_list(self) -> None:
+        """Test returns None for empty list."""
+        from yt_audio_cli.download.downloader import _find_metadata_in_lines
+
+        result = _find_metadata_in_lines([])
+
+        assert result is None
+
+
+class TestExtractFilePath:
+    """Tests for _extract_file_path() helper function."""
+
+    def test_extracts_from_requested_downloads(self, temp_dir: Path) -> None:
+        """Test extracting path from requested_downloads."""
+        from yt_audio_cli.download.downloader import _extract_file_path
+
+        metadata = {
+            "id": "test123",
+            "requested_downloads": [{"filepath": "/tmp/test123.webm"}],
+        }
+
+        result = _extract_file_path(metadata, temp_dir)
+
+        assert result == Path("/tmp/test123.webm")
+
+    def test_fallback_constructs_path(self, temp_dir: Path) -> None:
+        """Test fallback path construction when requested_downloads missing."""
+        from yt_audio_cli.download.downloader import _extract_file_path
+
+        metadata = {"id": "test123", "ext": "webm"}
+
+        result = _extract_file_path(metadata, temp_dir)
+
+        assert result == temp_dir / "test123.webm"
+
+    def test_fallback_with_defaults(self, temp_dir: Path) -> None:
+        """Test fallback with default values."""
+        from yt_audio_cli.download.downloader import _extract_file_path
+
+        metadata = {}
+
+        result = _extract_file_path(metadata, temp_dir)
+
+        assert result == temp_dir / "unknown.webm"
+
+
+class TestCleanErrorMessage:
+    """Tests for _clean_error_message() helper function."""
+
+    def test_extracts_error_after_prefix(self) -> None:
+        """Test extracting error after ERROR: prefix."""
+        from yt_audio_cli.download.downloader import _clean_error_message
+
+        stderr = "WARNING: Something\nERROR: Video unavailable"
+
+        result = _clean_error_message(stderr)
+
+        assert result == "Video unavailable"
+
+    def test_returns_first_line(self) -> None:
+        """Test returns first line of multi-line error."""
+        from yt_audio_cli.download.downloader import _clean_error_message
+
+        stderr = "First line\nSecond line\nThird line"
+
+        result = _clean_error_message(stderr)
+
+        assert result == "First line"
+
+    def test_truncates_long_messages(self) -> None:
+        """Test truncates messages over 200 characters."""
+        from yt_audio_cli.download.downloader import _clean_error_message
+
+        long_message = "A" * 250
+
+        result = _clean_error_message(long_message)
+
+        assert len(result) == 200
+        assert result.endswith("...")
+
+    def test_returns_unknown_for_empty(self) -> None:
+        """Test returns 'Unknown error' for empty input."""
+        from yt_audio_cli.download.downloader import _clean_error_message
+
+        assert _clean_error_message("") == "Unknown error"
+        assert _clean_error_message("   ") == "Unknown error"
+
+    def test_handles_only_error_prefix(self) -> None:
+        """Test handling ERROR: with no message after."""
+        from yt_audio_cli.download.downloader import _clean_error_message
+
+        result = _clean_error_message("ERROR:   ")
+
+        assert result == "Unknown error"
+
+
+class TestDownloadEdgeCases:
+    """Tests for download() edge cases."""
+
+    def test_download_with_none_output_dir(self) -> None:
+        """Test download uses temp directory when output_dir is None."""
+        from yt_audio_cli.download.downloader import download
+
+        with patch("subprocess.Popen") as mock_popen:
+            mock_popen.return_value = _create_mock_popen(
+                [], stderr="Error", returncode=1
+            )
+
+            result = download(
+                "https://youtube.com/watch?v=test",
+                progress_callback=lambda _d, _t: None,
+                output_dir=None,
+            )
+
+            assert result.success is False
+            # Verify yt-dlp was called
+            assert mock_popen.called
+
+    def test_download_file_not_found_error(self, temp_dir: Path) -> None:
+        """Test download handles FileNotFoundError (yt-dlp not installed)."""
+        from yt_audio_cli.download.downloader import download
+
+        with patch("subprocess.Popen") as mock_popen:
+            mock_popen.side_effect = FileNotFoundError("yt-dlp not found")
+
+            result = download(
+                "https://youtube.com/watch?v=test",
+                progress_callback=lambda _d, _t: None,
+                output_dir=temp_dir,
+            )
+
+            assert result.success is False
+            assert "yt-dlp not found" in result.error
+
+    def test_download_subprocess_error(self, temp_dir: Path) -> None:
+        """Test download handles SubprocessError."""
+        from subprocess import SubprocessError
+
+        from yt_audio_cli.download.downloader import download
+
+        with patch("subprocess.Popen") as mock_popen:
+            mock_popen.side_effect = SubprocessError("Process failed")
+
+            result = download(
+                "https://youtube.com/watch?v=test",
+                progress_callback=lambda _d, _t: None,
+                output_dir=temp_dir,
+            )
+
+            assert result.success is False
+            assert "Process failed" in result.error
+
+
+class TestProcessStdout:
+    """Tests for _process_stdout() helper function."""
+
+    def test_handles_none_stdout(self) -> None:
+        """Test handling when stdout is None."""
+        from yt_audio_cli.download.downloader import _process_stdout
+
+        mock_process = MagicMock()
+        mock_process.stdout = None
+
+        lines, metadata = _process_stdout(mock_process, lambda _d, _t: None)
+
+        assert len(lines) == 0
+        assert metadata is None
+
+    def test_skips_empty_lines(self) -> None:
+        """Test that empty lines are skipped."""
+        import io
+
+        from yt_audio_cli.download.downloader import _process_stdout
+
+        mock_process = MagicMock()
+        mock_process.stdout = io.StringIO("\n\n  \n")
+
+        lines, _metadata = _process_stdout(mock_process, lambda _d, _t: None)
+
+        assert len(lines) == 0

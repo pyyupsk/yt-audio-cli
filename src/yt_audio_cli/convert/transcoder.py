@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import shutil
 import subprocess  # nosec B404
 from pathlib import Path
@@ -12,12 +13,25 @@ from yt_audio_cli.core import ConversionError, FFmpegNotFoundError
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+logger = logging.getLogger(__name__)
+
+# Maximum reasonable duration for progress tracking (24 hours in seconds)
+MAX_DURATION_SECONDS = 86400
+
 # Codec mapping for audio formats
 _CODEC_MAP = {
     "mp3": "libmp3lame",
     "aac": "aac",
     "opus": "libopus",
     "wav": "pcm_s16le",
+}
+
+# FFmpeg format mapping (used with -f flag)
+_FORMAT_MAP = {
+    "mp3": "mp3",
+    "aac": "adts",
+    "opus": "opus",
+    "wav": "wav",
 }
 
 
@@ -51,9 +65,13 @@ def _process_ffmpeg_progress(
         if line.startswith("out_time_ms="):
             try:
                 microseconds = int(line.split("=")[1])
-                if microseconds >= 0:
-                    callback(microseconds / 1_000_000)
-            except (ValueError, IndexError):
+                if microseconds < 0:
+                    continue
+                seconds = microseconds / 1_000_000
+                if seconds > MAX_DURATION_SECONDS:
+                    continue
+                callback(seconds)
+            except (ValueError, IndexError, OverflowError):
                 pass
 
 
@@ -80,10 +98,16 @@ def _build_ffmpeg_command(
     if bitrate and audio_format != "wav":
         cmd.extend(["-b:a", f"{bitrate}k"])
 
+    output_format = _FORMAT_MAP.get(audio_format)
+    if output_format:
+        cmd.extend(["-f", output_format])
+
     if metadata:
         for key, value in metadata.items():
             if value:
                 cmd.extend(["-metadata", f"{key}={value}"])
+            else:
+                logger.debug("Skipping empty metadata field: %s", key)
 
     cmd.append(str(output_path))
     return cmd

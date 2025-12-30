@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import contextlib
 import json
+import logging
 import subprocess  # nosec B404
 import tempfile
+import threading
+from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -13,6 +16,14 @@ from urllib.parse import parse_qs, urlparse
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+logger = logging.getLogger(__name__)
+
+# Maximum lines to keep in memory during download progress parsing
+MAX_STDOUT_LINES = 1000
+
+# Maximum reasonable file size (10TB) for validation
+MAX_FILE_SIZE = 10 * 1024 * 1024 * 1024 * 1024
 
 
 @dataclass
@@ -60,7 +71,20 @@ def is_playlist(url: str) -> bool:
     Returns:
         True if URL appears to be a playlist, False otherwise.
     """
-    parsed = urlparse(url)
+    if not url or not isinstance(url, str):
+        return False
+
+    try:
+        parsed = urlparse(url)
+    except (ValueError, AttributeError):
+        return False
+
+    if not parsed.scheme or not parsed.netloc:
+        return False
+
+    if parsed.scheme.lower() not in ("http", "https"):
+        return False
+
     query_params = parse_qs(parsed.query)
 
     # Check for playlist parameter
@@ -241,9 +265,21 @@ def _parse_progress_line(line: str) -> tuple[int, int] | None:
     try:
         data = json.loads(line)
         if "downloaded_bytes" in data:
-            downloaded = data.get("downloaded_bytes", 0) or 0
-            total = data.get("total_bytes") or data.get("total_bytes_estimate") or 0
-            return (int(downloaded), int(total))
+            downloaded_raw = data.get("downloaded_bytes", 0) or 0
+            total_raw = data.get("total_bytes") or data.get("total_bytes_estimate") or 0
+
+            try:
+                downloaded = int(downloaded_raw)
+                total = int(total_raw)
+            except (ValueError, TypeError, OverflowError):
+                return None
+
+            if downloaded < 0 or downloaded > MAX_FILE_SIZE:
+                downloaded = 0
+            if total < 0 or total > MAX_FILE_SIZE:
+                total = 0
+
+            return (downloaded, total)
     except (ValueError, TypeError):
         pass
     return None
@@ -290,11 +326,24 @@ def _extract_file_path(metadata: dict, output_dir: Path) -> Path:
 
 
 def _clean_error_message(stderr: str) -> str:
-    """Extract clean error message from stderr."""
-    error_msg = stderr.strip() if stderr else "Unknown error"
+    """Extract clean error message from stderr.
+
+    Standardizes error message extraction to show only the first relevant line.
+    """
+    if not stderr or not stderr.strip():
+        return "Unknown error"
+
+    error_msg = stderr.strip()
+
     if "ERROR:" in error_msg:
         error_msg = error_msg.split("ERROR:")[-1].strip()
-    return error_msg
+
+    first_line = error_msg.split("\n")[0].strip()
+
+    if len(first_line) > 200:
+        first_line = first_line[:197] + "..."
+
+    return first_line if first_line else "Unknown error"
 
 
 def _build_yt_dlp_command(url: str, output_template: str) -> list[str]:
@@ -313,6 +362,103 @@ def _build_yt_dlp_command(url: str, output_template: str) -> list[str]:
         "download:%(progress)j",
         url,
     ]
+
+
+def _read_stderr(process: subprocess.Popen[str], stderr_lines: list[str]) -> None:
+    """Read stderr in a separate thread to prevent deadlock.
+
+    Args:
+        process: The subprocess with stderr pipe.
+        stderr_lines: List to collect stderr lines (modified in place).
+    """
+    if not process.stderr:
+        return
+    for line in process.stderr:
+        stderr_lines.append(line)
+
+
+def _safe_parse_duration(duration_value: float | int | str | None) -> float | None:
+    """Safely parse duration value to float.
+
+    Args:
+        duration_value: The duration value from yt-dlp output.
+
+    Returns:
+        Duration as float, or None if parsing fails.
+    """
+    if duration_value is None:
+        return None
+    try:
+        result = float(duration_value)
+        if result < 0 or result > 86400:
+            return None
+        return result
+    except (ValueError, TypeError, OverflowError):
+        return None
+
+
+def _log_stderr_warnings(stderr: str) -> None:
+    """Log any warnings from stderr output."""
+    if not stderr.strip():
+        return
+    for line in stderr.strip().split("\n"):
+        if "WARNING:" in line:
+            logger.warning("yt-dlp: %s", line.split("WARNING:")[-1].strip())
+
+
+def _build_success_result(
+    url: str, json_output: dict, output_dir: Path
+) -> DownloadResult:
+    """Build a successful download result from parsed metadata."""
+    return DownloadResult(
+        url=url,
+        title=json_output.get("title", "Unknown"),
+        artist=json_output.get("uploader", json_output.get("channel", "Unknown")),
+        temp_path=_extract_file_path(json_output, output_dir),
+        duration=_safe_parse_duration(json_output.get("duration")),
+        success=True,
+        error=None,
+    )
+
+
+def _run_yt_dlp(
+    cmd: list[str],
+    progress_callback: Callable[[int, int], None],
+    output_dir: Path,
+) -> DownloadResult:
+    """Run yt-dlp subprocess and return download result."""
+    with subprocess.Popen(  # nosec B603
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        bufsize=1,
+    ) as process:
+        stderr_lines: list[str] = []
+        stderr_thread = threading.Thread(
+            target=_read_stderr, args=(process, stderr_lines), daemon=True
+        )
+        stderr_thread.start()
+
+        stdout_lines, json_output = _process_stdout(process, progress_callback)
+
+        process.wait()
+        stderr_thread.join(timeout=5.0)
+
+        stderr = "".join(stderr_lines)
+
+        if process.returncode != 0:
+            return _create_error_result(cmd[-1], _clean_error_message(stderr))
+
+        _log_stderr_warnings(stderr)
+
+        if json_output is None:
+            json_output = _find_metadata_in_lines(list(stdout_lines))
+
+        if json_output is None:
+            return _create_error_result(cmd[-1], "Failed to parse yt-dlp output")
+
+        return _build_success_result(cmd[-1], json_output, output_dir)
 
 
 def download(
@@ -340,43 +486,7 @@ def download(
     cmd = _build_yt_dlp_command(url, output_template)
 
     try:
-        with subprocess.Popen(  # nosec B603
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            bufsize=1,
-        ) as process:
-            stdout_lines, json_output = _process_stdout(process, progress_callback)
-
-            process.wait()
-            stderr = process.stderr.read() if process.stderr else ""
-
-            if process.returncode != 0:
-                return _create_error_result(url, _clean_error_message(stderr))
-
-            if json_output is None:
-                json_output = _find_metadata_in_lines(stdout_lines)
-
-            if json_output is None:
-                return _create_error_result(url, "Failed to parse yt-dlp output")
-
-            duration = json_output.get("duration")
-            if duration is not None:
-                duration = float(duration)
-
-            return DownloadResult(
-                url=url,
-                title=json_output.get("title", "Unknown"),
-                artist=json_output.get(
-                    "uploader", json_output.get("channel", "Unknown")
-                ),
-                temp_path=_extract_file_path(json_output, output_dir),
-                duration=duration,
-                success=True,
-                error=None,
-            )
-
+        return _run_yt_dlp(cmd, progress_callback, output_dir)
     except FileNotFoundError:
         return _create_error_result(url, "yt-dlp not found. Please install yt-dlp.")
     except subprocess.SubprocessError as e:
@@ -386,13 +496,15 @@ def download(
 def _process_stdout(
     process: subprocess.Popen[str],
     progress_callback: Callable[[int, int], None],
-) -> tuple[list[str], dict | None]:
+) -> tuple[deque[str], dict | None]:
     """Process stdout from yt-dlp, calling progress callback and collecting output.
+
+    Uses a bounded deque to prevent unbounded memory growth.
 
     Returns:
         Tuple of (collected_lines, json_metadata_if_found).
     """
-    stdout_lines: list[str] = []
+    stdout_lines: deque[str] = deque(maxlen=MAX_STDOUT_LINES)
     json_output: dict | None = None
 
     if not process.stdout:
