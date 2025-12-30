@@ -1,6 +1,16 @@
 # yt-audio-cli
 
-Download audio from YouTube, SoundCloud, and 1000+ sites with a single command.
+A simple command-line tool for downloading audio from YouTube and other sites.
+
+## What This Is
+
+yt-audio-cli is an opinionated wrapper around [yt-dlp](https://github.com/yt-dlp/yt-dlp) and [FFmpeg](https://ffmpeg.org/), designed specifically for audio downloads. It provides sensible defaults and a streamlined interface for common audio extraction tasks.
+
+- **yt-dlp** handles all video/audio downloading and site support (1000+ sites)
+- **FFmpeg** handles audio conversion and processing
+- **yt-audio-cli** ties them together with audio-focused defaults and a simplified CLI
+
+If you need advanced features like video downloads, custom format selection, or fine-grained control, use yt-dlp directly.
 
 ## Quick Start
 
@@ -14,11 +24,13 @@ yt-audio-cli https://youtube.com/watch?v=VIDEO_ID
 
 ## Requirements
 
-**FFmpeg** must be installed on your system:
+**FFmpeg** must be installed on your system for audio conversion:
 
 - **Windows**: `winget install FFmpeg` or download from [ffmpeg.org](https://ffmpeg.org/download.html)
 - **macOS**: `brew install ffmpeg`
 - **Linux**: `sudo apt install ffmpeg` (Debian/Ubuntu) or `sudo dnf install ffmpeg` (Fedora)
+
+yt-dlp is installed automatically as a Python dependency.
 
 ## Installation
 
@@ -101,10 +113,10 @@ yt-audio-cli --no-metadata URL
 Install FFmpeg using the instructions in [Requirements](#requirements).
 
 **"Video unavailable"**
-The video may be private, age-restricted, or region-locked.
+The video may be private, age-restricted, or region-locked. This is a limitation of the source site, not yt-dlp or this tool.
 
 **Download fails**
-Check your internet connection and verify the URL is correct.
+Check your internet connection and verify the URL is correct. If the issue persists, ensure yt-dlp is up to date: `pip install -U yt-dlp`
 
 ## Metadata
 
