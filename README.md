@@ -1,5 +1,11 @@
 # yt-audio-cli
 
+[![CI](https://github.com/pyyupsk/yt-audio-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/pyyupsk/yt-audio-cli/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/pyyupsk/yt-audio-cli/graph/badge.svg?token=hvB8RREdML)](https://codecov.io/gh/pyyupsk/yt-audio-cli)
+[![PyPI](https://img.shields.io/pypi/v/yt-audio-cli)](https://pypi.org/project/yt-audio-cli/)
+[![Python](https://img.shields.io/pypi/pyversions/yt-audio-cli)](https://pypi.org/project/yt-audio-cli/)
+[![License](https://img.shields.io/github/license/pyyupsk/yt-audio-cli)](LICENSE)
+
 A simple command-line tool for downloading audio from YouTube and other sites.
 
 ## What This Is

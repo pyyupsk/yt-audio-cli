@@ -463,3 +463,492 @@ class TestMetadataEmbedding:
             # Verify embed_metadata is True by default
             call_args = mock_process.call_args
             assert call_args[1]["embed_metadata"] is True
+
+
+class TestShouldSkipExisting:
+    """Tests for _should_skip_existing() helper function."""
+
+    def test_skips_when_file_exists(self, temp_dir: Any) -> None:
+        """Test returns True when output file already exists."""
+        from pathlib import Path
+
+        from yt_audio_cli.cli import _should_skip_existing
+
+        # Create existing file
+        (temp_dir / "Test_Video.mp3").touch()
+
+        with (
+            patch("yt_audio_cli.cli.extract_metadata") as mock_extract,
+            patch("yt_audio_cli.cli.print_warning"),
+        ):
+            mock_extract.return_value = {"title": "Test Video"}
+            result = _should_skip_existing("https://test.com", "mp3", Path(temp_dir))
+            assert result is True
+
+    def test_does_not_skip_when_file_missing(self, temp_dir: Any) -> None:
+        """Test returns False when output file doesn't exist."""
+        from pathlib import Path
+
+        from yt_audio_cli.cli import _should_skip_existing
+
+        with patch("yt_audio_cli.cli.extract_metadata") as mock_extract:
+            mock_extract.return_value = {"title": "Test Video"}
+            result = _should_skip_existing("https://test.com", "mp3", Path(temp_dir))
+            assert result is False
+
+    def test_returns_false_when_metadata_extraction_fails(self, temp_dir: Any) -> None:
+        """Test returns False when metadata extraction fails."""
+        from pathlib import Path
+
+        from yt_audio_cli.cli import _should_skip_existing
+
+        with patch("yt_audio_cli.cli.extract_metadata") as mock_extract:
+            mock_extract.return_value = None
+            result = _should_skip_existing("https://test.com", "mp3", Path(temp_dir))
+            assert result is False
+
+    def test_returns_false_when_title_empty(self, temp_dir: Any) -> None:
+        """Test returns False when title is empty."""
+        from pathlib import Path
+
+        from yt_audio_cli.cli import _should_skip_existing
+
+        with patch("yt_audio_cli.cli.extract_metadata") as mock_extract:
+            mock_extract.return_value = {"title": ""}
+            result = _should_skip_existing("https://test.com", "mp3", Path(temp_dir))
+            assert result is False
+
+
+class TestDownloadAudio:
+    """Tests for _download_audio() helper function."""
+
+    def test_successful_download(self, temp_dir: Any) -> None:
+        """Test successful download returns result."""
+        from pathlib import Path
+
+        from yt_audio_cli.cli import _download_audio
+        from yt_audio_cli.download import DownloadResult
+
+        mock_result = DownloadResult(
+            url="https://test.com",
+            success=True,
+            title="Test",
+            artist="Artist",
+            duration=120.0,
+            temp_path=Path(temp_dir) / "test.webm",
+            error=None,
+        )
+
+        with (
+            patch("yt_audio_cli.cli.download") as mock_download,
+            patch("yt_audio_cli.cli.create_download_progress"),
+        ):
+            mock_download.return_value = mock_result
+            result = _download_audio("https://test.com", Path(temp_dir))
+            assert result.success is True
+            assert result.title == "Test"
+
+    def test_download_with_progress_callback(self, temp_dir: Any) -> None:
+        """Test download updates progress via callback."""
+        from pathlib import Path
+        from unittest.mock import MagicMock
+
+        from yt_audio_cli.cli import _download_audio
+        from yt_audio_cli.download import DownloadResult
+
+        mock_result = DownloadResult(
+            url="https://test.com",
+            success=True,
+            title="Test",
+            artist="Artist",
+            duration=120.0,
+            temp_path=Path(temp_dir) / "test.webm",
+            error=None,
+        )
+
+        mock_progress = MagicMock()
+        mock_progress.__enter__ = MagicMock(return_value=mock_progress)
+        mock_progress.__exit__ = MagicMock(return_value=False)
+        mock_progress.add_task = MagicMock(return_value=1)
+
+        with (
+            patch("yt_audio_cli.cli.download") as mock_download,
+            patch(
+                "yt_audio_cli.cli.create_download_progress",
+                return_value=mock_progress,
+            ),
+        ):
+            mock_download.return_value = mock_result
+            _download_audio("https://test.com", Path(temp_dir))
+
+            # Verify progress.add_task was called
+            mock_progress.add_task.assert_called_once()
+
+
+class TestConvertAudio:
+    """Tests for _convert_audio() helper function."""
+
+    def test_successful_conversion(self, temp_dir: Any) -> None:
+        """Test successful conversion returns output path."""
+        from pathlib import Path
+        from unittest.mock import MagicMock
+
+        from yt_audio_cli.cli import _convert_audio
+        from yt_audio_cli.download import DownloadResult
+
+        # Create temp input file
+        temp_file = Path(temp_dir) / "input.webm"
+        temp_file.touch()
+
+        result = DownloadResult(
+            url="https://test.com",
+            success=True,
+            title="Test Song",
+            artist="Test Artist",
+            duration=120.0,
+            temp_path=temp_file,
+            error=None,
+        )
+
+        mock_progress = MagicMock()
+        mock_progress.__enter__ = MagicMock(return_value=mock_progress)
+        mock_progress.__exit__ = MagicMock(return_value=False)
+        mock_progress.add_task = MagicMock(return_value=1)
+
+        with (
+            patch("yt_audio_cli.cli.transcode") as mock_transcode,
+            patch(
+                "yt_audio_cli.cli.create_conversion_progress",
+                return_value=mock_progress,
+            ),
+        ):
+            output_path = _convert_audio(result, Path(temp_dir), "mp3", 320, True)
+            assert output_path is not None
+            assert output_path.suffix == ".mp3"
+            mock_transcode.assert_called_once()
+
+    def test_conversion_with_ffmpeg_not_found(self, temp_dir: Any) -> None:
+        """Test conversion handles FFmpegNotFoundError."""
+        from pathlib import Path
+        from unittest.mock import MagicMock
+
+        from yt_audio_cli.cli import _convert_audio
+        from yt_audio_cli.core import FFmpegNotFoundError
+        from yt_audio_cli.download import DownloadResult
+
+        temp_file = Path(temp_dir) / "input.webm"
+        temp_file.touch()
+
+        result = DownloadResult(
+            url="https://test.com",
+            success=True,
+            title="Test",
+            artist="Artist",
+            duration=120.0,
+            temp_path=temp_file,
+            error=None,
+        )
+
+        mock_progress = MagicMock()
+        mock_progress.__enter__ = MagicMock(return_value=mock_progress)
+        mock_progress.__exit__ = MagicMock(return_value=False)
+        mock_progress.add_task = MagicMock(return_value=1)
+
+        with (
+            patch("yt_audio_cli.cli.transcode") as mock_transcode,
+            patch(
+                "yt_audio_cli.cli.create_conversion_progress",
+                return_value=mock_progress,
+            ),
+            patch("yt_audio_cli.cli.print_error"),
+        ):
+            mock_transcode.side_effect = FFmpegNotFoundError()
+            output_path = _convert_audio(result, Path(temp_dir), "mp3", 320, True)
+            assert output_path is None
+
+    def test_conversion_with_generic_error(self, temp_dir: Any) -> None:
+        """Test conversion handles generic errors."""
+        from pathlib import Path
+        from unittest.mock import MagicMock
+
+        from yt_audio_cli.cli import _convert_audio
+        from yt_audio_cli.download import DownloadResult
+
+        temp_file = Path(temp_dir) / "input.webm"
+        temp_file.touch()
+
+        result = DownloadResult(
+            url="https://test.com",
+            success=True,
+            title="Test",
+            artist="Artist",
+            duration=120.0,
+            temp_path=temp_file,
+            error=None,
+        )
+
+        mock_progress = MagicMock()
+        mock_progress.__enter__ = MagicMock(return_value=mock_progress)
+        mock_progress.__exit__ = MagicMock(return_value=False)
+        mock_progress.add_task = MagicMock(return_value=1)
+
+        with (
+            patch("yt_audio_cli.cli.transcode") as mock_transcode,
+            patch(
+                "yt_audio_cli.cli.create_conversion_progress",
+                return_value=mock_progress,
+            ),
+            patch("yt_audio_cli.cli.print_error"),
+        ):
+            mock_transcode.side_effect = RuntimeError("Unknown error")
+            output_path = _convert_audio(result, Path(temp_dir), "mp3", 320, True)
+            assert output_path is None
+
+    def test_conversion_without_metadata(self, temp_dir: Any) -> None:
+        """Test conversion without embedding metadata."""
+        from pathlib import Path
+        from unittest.mock import MagicMock
+
+        from yt_audio_cli.cli import _convert_audio
+        from yt_audio_cli.download import DownloadResult
+
+        temp_file = Path(temp_dir) / "input.webm"
+        temp_file.touch()
+
+        result = DownloadResult(
+            url="https://test.com",
+            success=True,
+            title="Test",
+            artist="Artist",
+            duration=120.0,
+            temp_path=temp_file,
+            error=None,
+        )
+
+        mock_progress = MagicMock()
+        mock_progress.__enter__ = MagicMock(return_value=mock_progress)
+        mock_progress.__exit__ = MagicMock(return_value=False)
+        mock_progress.add_task = MagicMock(return_value=1)
+
+        with (
+            patch("yt_audio_cli.cli.transcode") as mock_transcode,
+            patch(
+                "yt_audio_cli.cli.create_conversion_progress",
+                return_value=mock_progress,
+            ),
+        ):
+            _convert_audio(result, Path(temp_dir), "mp3", 320, False)
+            # Verify metadata is empty when embed_metadata=False
+            call_kwargs = mock_transcode.call_args[1]
+            assert call_kwargs["metadata"] == {}
+
+
+class TestProcessSingleUrl:
+    """Tests for process_single_url() function."""
+
+    def test_successful_download_and_conversion(self, temp_dir: Any) -> None:
+        """Test successful download and conversion flow."""
+        from pathlib import Path
+
+        from yt_audio_cli.cli import process_single_url
+        from yt_audio_cli.download import DownloadResult
+
+        mock_result = DownloadResult(
+            url="https://test.com",
+            success=True,
+            title="Test",
+            artist="Artist",
+            duration=120.0,
+            temp_path=Path(temp_dir) / "test.webm",
+            error=None,
+        )
+
+        with (
+            patch("yt_audio_cli.cli._download_audio") as mock_download,
+            patch("yt_audio_cli.cli._convert_audio") as mock_convert,
+            patch("yt_audio_cli.cli.print_success"),
+            patch("tempfile.TemporaryDirectory") as mock_tempdir,
+        ):
+            mock_tempdir.return_value.__enter__ = lambda s: str(temp_dir)
+            mock_tempdir.return_value.__exit__ = lambda s, *args: None
+            mock_download.return_value = mock_result
+            mock_result.temp_path.touch()
+            mock_convert.return_value = Path(temp_dir) / "test.mp3"
+
+            success = process_single_url(
+                "https://test.com",
+                "mp3",
+                Path(temp_dir),
+                320,
+                True,
+            )
+            assert success is True
+
+    def test_skips_existing_file(self, temp_dir: Any) -> None:
+        """Test skips when file exists and force=False."""
+        from pathlib import Path
+
+        from yt_audio_cli.cli import process_single_url
+
+        with patch("yt_audio_cli.cli._should_skip_existing") as mock_skip:
+            mock_skip.return_value = True
+
+            success = process_single_url(
+                "https://test.com",
+                "mp3",
+                Path(temp_dir),
+                320,
+                True,
+                force=False,
+            )
+            assert success is True
+            mock_skip.assert_called_once()
+
+    def test_does_not_skip_with_force_flag(self, temp_dir: Any) -> None:
+        """Test does not skip when force=True."""
+        from pathlib import Path
+
+        from yt_audio_cli.cli import process_single_url
+        from yt_audio_cli.download import DownloadResult
+
+        mock_result = DownloadResult(
+            url="https://test.com",
+            success=True,
+            title="Test",
+            artist="Artist",
+            duration=120.0,
+            temp_path=Path(temp_dir) / "test.webm",
+            error=None,
+        )
+
+        with (
+            patch("yt_audio_cli.cli._should_skip_existing") as mock_skip,
+            patch("yt_audio_cli.cli._download_audio") as mock_download,
+            patch("yt_audio_cli.cli._convert_audio") as mock_convert,
+            patch("yt_audio_cli.cli.print_success"),
+            patch("tempfile.TemporaryDirectory") as mock_tempdir,
+        ):
+            mock_tempdir.return_value.__enter__ = lambda s: str(temp_dir)
+            mock_tempdir.return_value.__exit__ = lambda s, *args: None
+            mock_download.return_value = mock_result
+            mock_result.temp_path.touch()
+            mock_convert.return_value = Path(temp_dir) / "test.mp3"
+
+            process_single_url(
+                "https://test.com",
+                "mp3",
+                Path(temp_dir),
+                320,
+                True,
+                force=True,
+            )
+            # _should_skip_existing should not be called with force=True
+            mock_skip.assert_not_called()
+
+    def test_download_failure(self, temp_dir: Any) -> None:
+        """Test handles download failure."""
+        from pathlib import Path
+
+        from yt_audio_cli.cli import process_single_url
+        from yt_audio_cli.download import DownloadResult
+
+        mock_result = DownloadResult(
+            url="https://test.com",
+            success=False,
+            title="",
+            artist="",
+            duration=0.0,
+            temp_path=Path(temp_dir) / "test.webm",
+            error="Connection failed",
+        )
+
+        with (
+            patch("yt_audio_cli.cli._download_audio") as mock_download,
+            patch("yt_audio_cli.cli.print_error"),
+            patch("tempfile.TemporaryDirectory") as mock_tempdir,
+        ):
+            mock_tempdir.return_value.__enter__ = lambda s: str(temp_dir)
+            mock_tempdir.return_value.__exit__ = lambda s, *args: None
+            mock_download.return_value = mock_result
+
+            success = process_single_url(
+                "https://test.com",
+                "mp3",
+                Path(temp_dir),
+                320,
+                True,
+            )
+            assert success is False
+
+    def test_temp_file_not_found(self, temp_dir: Any) -> None:
+        """Test handles missing temp file after download."""
+        from pathlib import Path
+
+        from yt_audio_cli.cli import process_single_url
+        from yt_audio_cli.download import DownloadResult
+
+        mock_result = DownloadResult(
+            url="https://test.com",
+            success=True,
+            title="Test",
+            artist="Artist",
+            duration=120.0,
+            temp_path=Path(temp_dir) / "nonexistent.webm",
+            error=None,
+        )
+
+        with (
+            patch("yt_audio_cli.cli._download_audio") as mock_download,
+            patch("yt_audio_cli.cli.print_error"),
+            patch("tempfile.TemporaryDirectory") as mock_tempdir,
+        ):
+            mock_tempdir.return_value.__enter__ = lambda s: str(temp_dir)
+            mock_tempdir.return_value.__exit__ = lambda s, *args: None
+            mock_download.return_value = mock_result
+            # Don't create the temp file
+
+            success = process_single_url(
+                "https://test.com",
+                "mp3",
+                Path(temp_dir),
+                320,
+                True,
+            )
+            assert success is False
+
+    def test_conversion_failure(self, temp_dir: Any) -> None:
+        """Test handles conversion failure."""
+        from pathlib import Path
+
+        from yt_audio_cli.cli import process_single_url
+        from yt_audio_cli.download import DownloadResult
+
+        mock_result = DownloadResult(
+            url="https://test.com",
+            success=True,
+            title="Test",
+            artist="Artist",
+            duration=120.0,
+            temp_path=Path(temp_dir) / "test.webm",
+            error=None,
+        )
+
+        with (
+            patch("yt_audio_cli.cli._download_audio") as mock_download,
+            patch("yt_audio_cli.cli._convert_audio") as mock_convert,
+            patch("tempfile.TemporaryDirectory") as mock_tempdir,
+        ):
+            mock_tempdir.return_value.__enter__ = lambda s: str(temp_dir)
+            mock_tempdir.return_value.__exit__ = lambda s, *args: None
+            mock_download.return_value = mock_result
+            mock_result.temp_path.touch()
+            mock_convert.return_value = None  # Conversion failed
+
+            success = process_single_url(
+                "https://test.com",
+                "mp3",
+                Path(temp_dir),
+                320,
+                True,
+            )
+            assert success is False

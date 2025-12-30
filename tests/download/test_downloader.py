@@ -422,6 +422,174 @@ class TestExtractPlaylist:
             # Should only return available videos
             assert len(urls) == 2
 
+    def test_extract_playlist_with_webpage_url_fallback(self) -> None:
+        """Test playlist extraction using webpage_url when url is missing."""
+        from yt_audio_cli.download.downloader import extract_playlist
+
+        playlist_entries = [
+            {
+                "id": "video1",
+                "webpage_url": "https://youtube.com/watch?v=video1",
+                "_type": "url",
+            },
+        ]
+        mock_output = json.dumps(playlist_entries[0])
+
+        with patch("subprocess.run") as mock_run:
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+            mock_result.stdout = mock_output
+            mock_result.stderr = ""
+            mock_run.return_value = mock_result
+
+            urls = extract_playlist("https://youtube.com/playlist?list=PLtest")
+
+            assert len(urls) == 1
+            assert "video1" in urls[0]
+
+    def test_extract_playlist_with_empty_lines(self) -> None:
+        """Test playlist extraction handles empty lines in output."""
+        from yt_audio_cli.download.downloader import extract_playlist
+
+        # Output with empty lines
+        mock_output = '\n{"id": "v1", "url": "https://youtube.com/watch?v=v1", "_type": "url"}\n\n'
+
+        with patch("subprocess.run") as mock_run:
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+            mock_result.stdout = mock_output
+            mock_result.stderr = ""
+            mock_run.return_value = mock_result
+
+            urls = extract_playlist("https://youtube.com/playlist?list=PLtest")
+
+            assert len(urls) == 1
+
+    def test_extract_playlist_with_invalid_json_line(self) -> None:
+        """Test playlist extraction handles invalid JSON lines gracefully."""
+        from yt_audio_cli.download.downloader import extract_playlist
+
+        # Mix of valid and invalid JSON
+        mock_output = '{"id": "v1", "url": "https://youtube.com/watch?v=v1", "_type": "url"}\n{invalid json}\n'
+
+        with patch("subprocess.run") as mock_run:
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+            mock_result.stdout = mock_output
+            mock_result.stderr = ""
+            mock_run.return_value = mock_result
+
+            urls = extract_playlist("https://youtube.com/playlist?list=PLtest")
+
+            # Should still return the valid entry
+            assert len(urls) == 1
+
+    def test_extract_playlist_file_not_found(self) -> None:
+        """Test playlist extraction when yt-dlp is not installed."""
+        from yt_audio_cli.download.downloader import extract_playlist
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.side_effect = FileNotFoundError("yt-dlp not found")
+
+            urls = extract_playlist("https://youtube.com/playlist?list=PLtest")
+
+            assert urls == []
+
+    def test_extract_playlist_subprocess_error(self) -> None:
+        """Test playlist extraction handles subprocess errors."""
+        from subprocess import SubprocessError
+
+        from yt_audio_cli.download.downloader import extract_playlist
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.side_effect = SubprocessError("Process failed")
+
+            urls = extract_playlist("https://youtube.com/playlist?list=PLtest")
+
+            assert urls == []
+
+
+class TestExtractMetadata:
+    """Tests for extract_metadata() function."""
+
+    def test_extract_metadata_success(self) -> None:
+        """Test successful metadata extraction."""
+        from yt_audio_cli.download.downloader import extract_metadata
+
+        mock_metadata = {
+            "id": "test123",
+            "title": "Test Video",
+            "uploader": "Test Channel",
+            "duration": 180.5,
+        }
+
+        with patch("subprocess.run") as mock_run:
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+            mock_result.stdout = json.dumps(mock_metadata)
+            mock_result.stderr = ""
+            mock_run.return_value = mock_result
+
+            result = extract_metadata("https://youtube.com/watch?v=test123")
+
+            assert result is not None
+            assert result["title"] == "Test Video"
+            assert result["duration"] == 180.5
+
+    def test_extract_metadata_failure(self) -> None:
+        """Test metadata extraction failure returns None."""
+        from yt_audio_cli.download.downloader import extract_metadata
+
+        with patch("subprocess.run") as mock_run:
+            mock_result = MagicMock()
+            mock_result.returncode = 1
+            mock_result.stdout = ""
+            mock_result.stderr = "ERROR: Video unavailable"
+            mock_run.return_value = mock_result
+
+            result = extract_metadata("https://youtube.com/watch?v=invalid")
+
+            assert result is None
+
+    def test_extract_metadata_file_not_found(self) -> None:
+        """Test metadata extraction when yt-dlp is not installed."""
+        from yt_audio_cli.download.downloader import extract_metadata
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.side_effect = FileNotFoundError("yt-dlp not found")
+
+            result = extract_metadata("https://youtube.com/watch?v=test")
+
+            assert result is None
+
+    def test_extract_metadata_invalid_json(self) -> None:
+        """Test metadata extraction with invalid JSON response."""
+        from yt_audio_cli.download.downloader import extract_metadata
+
+        with patch("subprocess.run") as mock_run:
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+            mock_result.stdout = "{invalid json"
+            mock_result.stderr = ""
+            mock_run.return_value = mock_result
+
+            result = extract_metadata("https://youtube.com/watch?v=test")
+
+            assert result is None
+
+    def test_extract_metadata_subprocess_error(self) -> None:
+        """Test metadata extraction handles subprocess errors."""
+        from subprocess import SubprocessError
+
+        from yt_audio_cli.download.downloader import extract_metadata
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.side_effect = SubprocessError("Process failed")
+
+            result = extract_metadata("https://youtube.com/watch?v=test")
+
+            assert result is None
+
 
 class TestPlaylistDetection:
     """Tests for is_playlist() function."""

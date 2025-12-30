@@ -209,3 +209,116 @@ class TestCreateConversionProgress:
 
         progress = create_conversion_progress()
         assert progress.console is console
+
+
+class TestCreateBatchProgress:
+    """Tests for create_batch_progress() factory function."""
+
+    def test_returns_progress_instance(self) -> None:
+        """Test that factory returns a Progress instance."""
+        from yt_audio_cli.ui.progress import create_batch_progress
+
+        progress = create_batch_progress()
+        assert isinstance(progress, Progress)
+
+    def test_has_required_columns(self) -> None:
+        """Test that batch progress has percentage and count columns."""
+        from yt_audio_cli.ui.progress import create_batch_progress
+
+        progress = create_batch_progress()
+        column_types = [type(col) for col in progress.columns]
+
+        assert SpinnerColumn in column_types
+        assert TextColumn in column_types
+        assert BarColumn in column_types
+
+    def test_uses_console(self) -> None:
+        """Test that progress uses the shared console instance."""
+        from yt_audio_cli.ui.progress import console, create_batch_progress
+
+        progress = create_batch_progress()
+        assert progress.console is console
+
+    def test_can_track_batch_items(self) -> None:
+        """Test that batch progress can track item count."""
+        from yt_audio_cli.ui.progress import create_batch_progress
+
+        with create_batch_progress() as progress:
+            task_id = progress.add_task("Processing...", total=10)
+            progress.update(task_id, completed=5)
+
+            task = progress.tasks[0]
+            assert task.completed == 5
+            assert task.total == 10
+
+
+class TestUpdateDownload:
+    """Tests for update_download() helper function."""
+
+    def test_updates_task_progress(self) -> None:
+        """Test that update_download updates task correctly."""
+        from yt_audio_cli.ui.progress import create_download_progress, update_download
+
+        with create_download_progress() as progress:
+            task_id = progress.add_task("Downloading...", total=0)
+            update_download(progress, task_id, downloaded=500, total=1000)
+
+            task = progress.tasks[0]
+            assert task.completed == 500
+            assert task.total == 1000
+
+
+class TestPrintFunctions:
+    """Tests for print helper functions."""
+
+    def test_print_success(self) -> None:
+        """Test print_success outputs correctly."""
+        from unittest.mock import patch
+
+        from yt_audio_cli.ui.progress import print_success
+
+        with patch("yt_audio_cli.ui.progress.console") as mock_console:
+            print_success("Operation completed")
+            mock_console.print.assert_called_once()
+            call_args = mock_console.print.call_args[0][0]
+            assert "Operation completed" in call_args
+            assert "✓" in call_args
+
+    def test_print_error(self) -> None:
+        """Test print_error outputs correctly."""
+        from unittest.mock import patch
+
+        from yt_audio_cli.ui.progress import print_error
+
+        with patch("yt_audio_cli.ui.progress.console") as mock_console:
+            print_error("Something went wrong")
+            mock_console.print.assert_called_once()
+            call_args = mock_console.print.call_args[0][0]
+            assert "Something went wrong" in call_args
+            assert "✗" in call_args
+
+    def test_print_warning(self) -> None:
+        """Test print_warning outputs correctly."""
+        from unittest.mock import patch
+
+        from yt_audio_cli.ui.progress import print_warning
+
+        with patch("yt_audio_cli.ui.progress.console") as mock_console:
+            print_warning("Be careful")
+            mock_console.print.assert_called_once()
+            call_args = mock_console.print.call_args[0][0]
+            assert "Be careful" in call_args
+            assert "!" in call_args
+
+    def test_print_info(self) -> None:
+        """Test print_info outputs correctly."""
+        from unittest.mock import patch
+
+        from yt_audio_cli.ui.progress import print_info
+
+        with patch("yt_audio_cli.ui.progress.console") as mock_console:
+            print_info("Processing item")
+            mock_console.print.assert_called_once()
+            call_args = mock_console.print.call_args[0][0]
+            assert "Processing item" in call_args
+            assert "→" in call_args
