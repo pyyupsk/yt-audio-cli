@@ -1339,3 +1339,156 @@ class TestProgressCallbacks:
             assert captured_callback is not None  # NOSONAR - modified by closure
             captured_callback(60.0)
             mock_progress.update.assert_called_with(1, completed=60.0)
+
+
+class TestConvertAudioFileConflict:
+    """Tests for _convert_audio() file conflict resolution."""
+
+    def test_resolves_file_conflict_when_output_exists(self, temp_dir: Any) -> None:
+        """Test that file conflicts are resolved when output file already exists."""
+        from pathlib import Path
+        from unittest.mock import MagicMock
+
+        from yt_audio_cli.cli import _convert_audio
+        from yt_audio_cli.download import DownloadResult
+
+        # Create temp input file
+        temp_file = Path(temp_dir) / "input.webm"
+        temp_file.touch()
+
+        # Create existing output file (conflict)
+        existing_output = Path(temp_dir) / "Test_Song.mp3"
+        existing_output.touch()
+
+        result = DownloadResult(
+            url="https://test.com",
+            success=True,
+            title="Test Song",
+            artist="Test Artist",
+            duration=120.0,
+            temp_path=temp_file,
+            error=None,
+        )
+
+        mock_progress = MagicMock()
+        mock_progress.__enter__ = MagicMock(return_value=mock_progress)
+        mock_progress.__exit__ = MagicMock(return_value=False)
+        mock_progress.add_task = MagicMock(return_value=1)
+
+        def create_temp_output(*args: Any, **kwargs: Any) -> bool:
+            """Mock transcode that creates the temp output file."""
+            output_path = kwargs.get("output_path") or args[1]
+            output_path.touch()
+            return True
+
+        with (
+            patch(
+                "yt_audio_cli.cli.transcode", side_effect=create_temp_output
+            ),
+            patch(
+                "yt_audio_cli.cli.create_conversion_progress",
+                return_value=mock_progress,
+            ),
+        ):
+            output_path = _convert_audio(result, Path(temp_dir), "mp3", 320, True)
+
+            # Should resolve conflict by appending (1)
+            assert output_path is not None
+            assert output_path.name == "Test_Song (1).mp3"
+            assert output_path.exists()
+
+
+class TestConvertAudioTempFileCleanup:
+    """Tests for _convert_audio() temp file cleanup in finally block."""
+
+    def test_cleans_up_temp_file_on_error(self, temp_dir: Any) -> None:
+        """Test that temp output file is cleaned up when transcode fails."""
+        from pathlib import Path
+        from unittest.mock import MagicMock
+
+        from yt_audio_cli.cli import _convert_audio
+        from yt_audio_cli.download import DownloadResult
+
+        temp_file = Path(temp_dir) / "input.webm"
+        temp_file.touch()
+
+        result = DownloadResult(
+            url="https://test.com",
+            success=True,
+            title="Test",
+            artist="Artist",
+            duration=120.0,
+            temp_path=temp_file,
+            error=None,
+        )
+
+        mock_progress = MagicMock()
+        mock_progress.__enter__ = MagicMock(return_value=mock_progress)
+        mock_progress.__exit__ = MagicMock(return_value=False)
+        mock_progress.add_task = MagicMock(return_value=1)
+
+        def create_then_fail(*args: Any, **kwargs: Any) -> None:
+            """Mock transcode that creates temp file then fails."""
+            output_path = kwargs.get("output_path") or args[1]
+            output_path.touch()
+            raise RuntimeError("Transcode failed")
+
+        with (
+            patch("yt_audio_cli.cli.transcode", side_effect=create_then_fail),
+            patch(
+                "yt_audio_cli.cli.create_conversion_progress",
+                return_value=mock_progress,
+            ),
+            patch("yt_audio_cli.cli.print_error"),
+        ):
+            output_path = _convert_audio(result, Path(temp_dir), "mp3", 320, True)
+
+            assert output_path is None
+            # Temp file in .converting dir should be cleaned up
+            converting_dir = Path(temp_dir) / ".converting"
+            if converting_dir.exists():
+                temp_files = list(converting_dir.glob("*.mp3"))
+                assert len(temp_files) == 0
+
+
+class TestMainCommandErrors:
+    """Tests for main command error handling."""
+
+    @pytest.fixture
+    def runner(self) -> CliRunner:
+        """Create CLI test runner."""
+        return CliRunner()
+
+    @pytest.fixture
+    def cli_app(self) -> Any:
+        """Get the CLI app for testing."""
+        from yt_audio_cli.cli import app
+
+        return app
+
+    def test_ffmpeg_not_found_exits_with_code_2(
+        self, runner: CliRunner, cli_app: Any
+    ) -> None:
+        """Test that FFmpeg not found returns exit code 2."""
+        with patch("yt_audio_cli.cli.check_ffmpeg") as mock_check:
+            mock_check.return_value = False
+
+            result = runner.invoke(cli_app, ["https://youtube.com/watch?v=test"])
+
+            assert result.exit_code == 2
+            assert "ffmpeg" in result.output.lower()
+
+    def test_invalid_quality_preset_exits_with_code_2(
+        self, runner: CliRunner, cli_app: Any
+    ) -> None:
+        """Test that invalid quality preset returns exit code 2."""
+        with patch("yt_audio_cli.cli.check_ffmpeg") as mock_check:
+            mock_check.return_value = True
+
+            result = runner.invoke(
+                cli_app,
+                ["--quality", "invalid_preset", "https://youtube.com/watch?v=test"],
+            )
+
+            assert result.exit_code == 2
+            assert "invalid" in result.output.lower()
