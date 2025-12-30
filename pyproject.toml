@@ -16,6 +16,9 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/yt_audio_cli"]
 
+[tool.hatch.build.targets.sdist]
+include = ["src/", "LICENSE", "README.md", "pyproject.toml"]
+
 [dependency-groups]
 dev = [
     "bandit>=1.9.2",
