@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from yt_audio_cli.errors import (
     ConversionError,
     DownloadError,

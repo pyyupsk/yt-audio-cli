@@ -4,8 +4,8 @@ from yt_audio_cli.errors import ConversionError, DownloadError, FFmpegNotFoundEr
 
 __version__ = "0.1.0"
 __all__ = [
-    "__version__",
     "ConversionError",
     "DownloadError",
     "FFmpegNotFoundError",
+    "__version__",
 ]
