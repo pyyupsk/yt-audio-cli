@@ -7,7 +7,7 @@ import subprocess  # nosec B404
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from yt_audio_cli.errors import ConversionError, FFmpegNotFoundError
+from yt_audio_cli.core import ConversionError, FFmpegNotFoundError
 
 if TYPE_CHECKING:
     from collections.abc import Callable

@@ -9,17 +9,21 @@ from typing import Annotated
 import typer
 
 from yt_audio_cli import __version__
-from yt_audio_cli.converter import check_ffmpeg, transcode
-from yt_audio_cli.downloader import (
+from yt_audio_cli.convert import check_ffmpeg, transcode
+from yt_audio_cli.core import (
+    FFmpegNotFoundError,
+    format_error,
+    resolve_conflict,
+    sanitize,
+)
+from yt_audio_cli.download import (
     DownloadResult,
     download,
     extract_metadata,
     extract_playlist,
     is_playlist,
 )
-from yt_audio_cli.errors import FFmpegNotFoundError, format_error
-from yt_audio_cli.filename import resolve_conflict, sanitize
-from yt_audio_cli.progress import (
+from yt_audio_cli.ui import (
     create_conversion_progress,
     create_download_progress,
     print_error,

@@ -21,14 +21,14 @@ class TestCreateDownloadProgress:
 
     def test_returns_progress_instance(self) -> None:
         """Test that factory returns a Progress instance."""
-        from yt_audio_cli.progress import create_download_progress
+        from yt_audio_cli.ui.progress import create_download_progress
 
         progress = create_download_progress()
         assert isinstance(progress, Progress)
 
     def test_has_required_columns(self) -> None:
         """Test that download progress has all required columns."""
-        from yt_audio_cli.progress import create_download_progress
+        from yt_audio_cli.ui.progress import create_download_progress
 
         progress = create_download_progress()
         column_types = [type(col) for col in progress.columns]
@@ -43,14 +43,14 @@ class TestCreateDownloadProgress:
 
     def test_uses_console(self) -> None:
         """Test that progress uses the shared console instance."""
-        from yt_audio_cli.progress import console, create_download_progress
+        from yt_audio_cli.ui.progress import console, create_download_progress
 
         progress = create_download_progress()
         assert progress.console is console
 
     def test_can_add_task(self) -> None:
         """Test that a task can be added to the progress."""
-        from yt_audio_cli.progress import create_download_progress
+        from yt_audio_cli.ui.progress import create_download_progress
 
         with create_download_progress() as progress:
             task_id = progress.add_task("Downloading...", total=1000)
@@ -58,7 +58,7 @@ class TestCreateDownloadProgress:
 
     def test_can_update_task(self) -> None:
         """Test that a task can be updated with progress."""
-        from yt_audio_cli.progress import create_download_progress
+        from yt_audio_cli.ui.progress import create_download_progress
 
         with create_download_progress() as progress:
             task_id = progress.add_task("Downloading...", total=1000)
@@ -74,14 +74,14 @@ class TestCreateProgress:
 
     def test_returns_progress_instance(self) -> None:
         """Test that factory returns a Progress instance."""
-        from yt_audio_cli.progress import create_progress
+        from yt_audio_cli.ui.progress import create_progress
 
         progress = create_progress()
         assert isinstance(progress, Progress)
 
     def test_has_download_columns(self) -> None:
         """Test that progress has download-style columns."""
-        from yt_audio_cli.progress import create_progress
+        from yt_audio_cli.ui.progress import create_progress
 
         progress = create_progress()
         column_types = [type(col) for col in progress.columns]
@@ -95,7 +95,7 @@ class TestTimeProgressColumn:
 
     def test_format_time_under_one_hour(self) -> None:
         """Test time formatting for durations under one hour."""
-        from yt_audio_cli.progress import TimeProgressColumn
+        from yt_audio_cli.ui.progress import TimeProgressColumn
 
         column = TimeProgressColumn()
 
@@ -109,7 +109,7 @@ class TestTimeProgressColumn:
 
     def test_format_time_over_one_hour(self) -> None:
         """Test time formatting for durations over one hour."""
-        from yt_audio_cli.progress import TimeProgressColumn
+        from yt_audio_cli.ui.progress import TimeProgressColumn
 
         column = TimeProgressColumn()
 
@@ -120,7 +120,7 @@ class TestTimeProgressColumn:
 
     def test_render_with_total(self) -> None:
         """Test rendering when total duration is known."""
-        from yt_audio_cli.progress import TimeProgressColumn
+        from yt_audio_cli.ui.progress import TimeProgressColumn
 
         column = TimeProgressColumn()
 
@@ -135,7 +135,7 @@ class TestTimeProgressColumn:
 
     def test_render_without_total(self) -> None:
         """Test rendering when total duration is unknown."""
-        from yt_audio_cli.progress import TimeProgressColumn
+        from yt_audio_cli.ui.progress import TimeProgressColumn
 
         column = TimeProgressColumn()
 
@@ -152,7 +152,7 @@ class TestTimeProgressColumn:
 
     def test_render_with_zero_total(self) -> None:
         """Test rendering when total is zero (indeterminate)."""
-        from yt_audio_cli.progress import TimeProgressColumn
+        from yt_audio_cli.ui.progress import TimeProgressColumn
 
         column = TimeProgressColumn()
 
@@ -171,14 +171,17 @@ class TestCreateConversionProgress:
 
     def test_returns_progress_instance(self) -> None:
         """Test that factory returns a Progress instance."""
-        from yt_audio_cli.progress import create_conversion_progress
+        from yt_audio_cli.ui.progress import create_conversion_progress
 
         progress = create_conversion_progress()
         assert isinstance(progress, Progress)
 
     def test_has_required_columns(self) -> None:
         """Test that conversion progress has time-based columns."""
-        from yt_audio_cli.progress import TimeProgressColumn, create_conversion_progress
+        from yt_audio_cli.ui.progress import (
+            TimeProgressColumn,
+            create_conversion_progress,
+        )
 
         progress = create_conversion_progress()
         column_types = [type(col) for col in progress.columns]
@@ -191,7 +194,7 @@ class TestCreateConversionProgress:
 
     def test_does_not_have_download_columns(self) -> None:
         """Test that conversion progress does NOT have byte-based columns."""
-        from yt_audio_cli.progress import create_conversion_progress
+        from yt_audio_cli.ui.progress import create_conversion_progress
 
         progress = create_conversion_progress()
         column_types = [type(col) for col in progress.columns]
@@ -202,7 +205,7 @@ class TestCreateConversionProgress:
 
     def test_uses_console(self) -> None:
         """Test that progress uses the shared console instance."""
-        from yt_audio_cli.progress import console, create_conversion_progress
+        from yt_audio_cli.ui.progress import console, create_conversion_progress
 
         progress = create_conversion_progress()
         assert progress.console is console

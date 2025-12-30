@@ -1,6 +1,6 @@
 """A simple command-line tool for downloading audio from YouTube and other sites."""
 
-from yt_audio_cli.errors import ConversionError, DownloadError, FFmpegNotFoundError
+from yt_audio_cli.core import ConversionError, DownloadError, FFmpegNotFoundError
 
 __version__ = "0.1.0"
 __metadata__ = {

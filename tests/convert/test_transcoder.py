@@ -7,8 +7,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from yt_audio_cli.converter import _process_ffmpeg_progress, check_ffmpeg, transcode
-from yt_audio_cli.errors import ConversionError, FFmpegNotFoundError
+from yt_audio_cli.convert.transcoder import (
+    _process_ffmpeg_progress,
+    check_ffmpeg,
+    transcode,
+)
+from yt_audio_cli.core import ConversionError, FFmpegNotFoundError
 
 
 class TestCheckFFmpeg:

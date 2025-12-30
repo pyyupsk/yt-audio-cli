@@ -14,7 +14,7 @@ class TestDownloadResult:
 
     def test_create_success_result(self) -> None:
         """Test creating a successful download result."""
-        from yt_audio_cli.downloader import DownloadResult
+        from yt_audio_cli.download.downloader import DownloadResult
 
         result = DownloadResult(
             url="https://youtube.com/watch?v=test",
@@ -32,7 +32,7 @@ class TestDownloadResult:
 
     def test_create_failure_result(self) -> None:
         """Test creating a failed download result."""
-        from yt_audio_cli.downloader import DownloadResult
+        from yt_audio_cli.download.downloader import DownloadResult
 
         result = DownloadResult(
             url="https://youtube.com/watch?v=test",
@@ -49,7 +49,7 @@ class TestDownloadResult:
 
     def test_duration_can_be_none(self) -> None:
         """Test that duration can be None for unknown duration."""
-        from yt_audio_cli.downloader import DownloadResult
+        from yt_audio_cli.download.downloader import DownloadResult
 
         result = DownloadResult(
             url="https://youtube.com/watch?v=test",
@@ -69,7 +69,7 @@ class TestParseProgressLine:
 
     def test_parse_valid_progress_json(self) -> None:
         """Test parsing valid progress JSON."""
-        from yt_audio_cli.downloader import _parse_progress_line
+        from yt_audio_cli.download.downloader import _parse_progress_line
 
         line = '{"downloaded_bytes": 1024, "total_bytes": 4096}'
         result = _parse_progress_line(line)
@@ -77,7 +77,7 @@ class TestParseProgressLine:
 
     def test_parse_progress_with_estimate(self) -> None:
         """Test parsing progress with total_bytes_estimate."""
-        from yt_audio_cli.downloader import _parse_progress_line
+        from yt_audio_cli.download.downloader import _parse_progress_line
 
         line = '{"downloaded_bytes": 512, "total_bytes_estimate": 2048}'
         result = _parse_progress_line(line)
@@ -85,7 +85,7 @@ class TestParseProgressLine:
 
     def test_parse_non_progress_json(self) -> None:
         """Test non-progress JSON returns None."""
-        from yt_audio_cli.downloader import _parse_progress_line
+        from yt_audio_cli.download.downloader import _parse_progress_line
 
         line = '{"id": "test123", "title": "Test"}'
         result = _parse_progress_line(line)
@@ -93,14 +93,14 @@ class TestParseProgressLine:
 
     def test_parse_non_json_line(self) -> None:
         """Test non-JSON line returns None."""
-        from yt_audio_cli.downloader import _parse_progress_line
+        from yt_audio_cli.download.downloader import _parse_progress_line
 
         result = _parse_progress_line("[download] 50% of 10MiB")
         assert result is None
 
     def test_parse_invalid_json(self) -> None:
         """Test invalid JSON returns None."""
-        from yt_audio_cli.downloader import _parse_progress_line
+        from yt_audio_cli.download.downloader import _parse_progress_line
 
         result = _parse_progress_line("{invalid json}")
         assert result is None
@@ -137,7 +137,7 @@ class TestDownload:
         self, temp_dir: Path, mock_yt_dlp_success: dict
     ) -> None:
         """Test successful video download."""
-        from yt_audio_cli.downloader import download
+        from yt_audio_cli.download.downloader import download
 
         # Create a mock temp file
         temp_file = temp_dir / "test_video.webm"
@@ -183,7 +183,7 @@ class TestDownload:
         self, temp_dir: Path, mock_yt_dlp_success: dict
     ) -> None:
         """Test that duration is extracted from yt-dlp metadata."""
-        from yt_audio_cli.downloader import download
+        from yt_audio_cli.download.downloader import download
 
         # Create a mock temp file
         temp_file = temp_dir / "test_video.webm"
@@ -210,7 +210,7 @@ class TestDownload:
         self, temp_dir: Path, mock_yt_dlp_success: dict
     ) -> None:
         """Test that duration is None when not in metadata."""
-        from yt_audio_cli.downloader import download
+        from yt_audio_cli.download.downloader import download
 
         # Create a mock temp file
         temp_file = temp_dir / "test_video.webm"
@@ -235,7 +235,7 @@ class TestDownload:
 
     def test_download_invalid_url(self, temp_dir: Path) -> None:
         """Test download with invalid URL."""
-        from yt_audio_cli.downloader import download
+        from yt_audio_cli.download.downloader import download
 
         with patch("subprocess.Popen") as mock_popen:
             mock_popen.return_value = _create_mock_popen(
@@ -254,7 +254,7 @@ class TestDownload:
 
     def test_download_private_video(self, temp_dir: Path) -> None:
         """Test download of private video."""
-        from yt_audio_cli.downloader import download
+        from yt_audio_cli.download.downloader import download
 
         with patch("subprocess.Popen") as mock_popen:
             mock_popen.return_value = _create_mock_popen(
@@ -272,7 +272,7 @@ class TestDownload:
 
     def test_download_network_error(self, temp_dir: Path) -> None:
         """Test download with network error."""
-        from yt_audio_cli.downloader import download
+        from yt_audio_cli.download.downloader import download
 
         with patch("subprocess.Popen") as mock_popen:
             mock_popen.return_value = _create_mock_popen(
@@ -290,7 +290,7 @@ class TestDownload:
 
     def test_download_uses_correct_yt_dlp_args(self, temp_dir: Path) -> None:
         """Test that download uses correct yt-dlp arguments."""
-        from yt_audio_cli.downloader import download
+        from yt_audio_cli.download.downloader import download
 
         with patch("subprocess.Popen") as mock_popen:
             mock_popen.return_value = _create_mock_popen(
@@ -319,7 +319,7 @@ class TestExtractPlaylist:
 
     def test_extract_playlist_urls(self) -> None:
         """Test extracting video URLs from playlist."""
-        from yt_audio_cli.downloader import extract_playlist
+        from yt_audio_cli.download.downloader import extract_playlist
 
         # yt-dlp --flat-playlist outputs one JSON per line
         playlist_entries = [
@@ -355,7 +355,7 @@ class TestExtractPlaylist:
 
     def test_extract_single_video_returns_empty(self) -> None:
         """Test that single video URL returns empty list."""
-        from yt_audio_cli.downloader import extract_playlist
+        from yt_audio_cli.download.downloader import extract_playlist
 
         # Single video returns one JSON with no _type=url or entries
         single_video = {
@@ -377,7 +377,7 @@ class TestExtractPlaylist:
 
     def test_extract_playlist_error(self) -> None:
         """Test playlist extraction error handling."""
-        from yt_audio_cli.downloader import extract_playlist
+        from yt_audio_cli.download.downloader import extract_playlist
 
         with patch("subprocess.run") as mock_run:
             mock_result = MagicMock()
@@ -392,7 +392,7 @@ class TestExtractPlaylist:
 
     def test_extract_playlist_with_unavailable_videos(self) -> None:
         """Test playlist with some unavailable videos."""
-        from yt_audio_cli.downloader import extract_playlist
+        from yt_audio_cli.download.downloader import extract_playlist
 
         # Unavailable videos are typically omitted from flat-playlist output
         # or appear with different structure
@@ -428,21 +428,21 @@ class TestPlaylistDetection:
 
     def test_playlist_url_detected(self) -> None:
         """Test playlist URLs are detected."""
-        from yt_audio_cli.downloader import is_playlist
+        from yt_audio_cli.download.downloader import is_playlist
 
         assert is_playlist("https://youtube.com/playlist?list=PLtest") is True
         assert is_playlist("https://www.youtube.com/playlist?list=PLabc") is True
 
     def test_video_url_not_playlist(self) -> None:
         """Test single video URLs are not detected as playlist."""
-        from yt_audio_cli.downloader import is_playlist
+        from yt_audio_cli.download.downloader import is_playlist
 
         assert is_playlist("https://youtube.com/watch?v=test") is False
         assert is_playlist("https://youtu.be/test") is False
 
     def test_video_in_playlist_detected(self) -> None:
         """Test video URL with playlist parameter."""
-        from yt_audio_cli.downloader import is_playlist
+        from yt_audio_cli.download.downloader import is_playlist
 
         # Video in playlist context - should detect as playlist
         url = "https://youtube.com/watch?v=test&list=PLtest"

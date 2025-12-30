@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from yt_audio_cli.filename import resolve_conflict, sanitize
+from yt_audio_cli.core import resolve_conflict, sanitize
 
 
 class TestSanitize:

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from yt_audio_cli.errors import (
+from yt_audio_cli.core import (
     ConversionError,
     DownloadError,
     FFmpegNotFoundError,
