@@ -320,18 +320,23 @@ class TestPlaylistDownload:
     """Tests for playlist download functionality (US3)."""
 
     def test_playlist_url_expansion(self) -> None:
-        """Test playlist URLs are expanded to video URLs."""
+        """Test playlist URLs are expanded to video entries."""
         from yt_audio_cli.cli import expand_playlist_urls
+        from yt_audio_cli.download import PlaylistEntry
 
         with (
             patch("yt_audio_cli.cli.is_playlist") as mock_is_playlist,
-            patch("yt_audio_cli.cli.extract_playlist") as mock_extract,
+            patch("yt_audio_cli.cli.extract_playlist_with_metadata") as mock_extract,
             patch("yt_audio_cli.cli.print_info"),
         ):
             mock_is_playlist.side_effect = [True, False]
             mock_extract.return_value = [
-                "https://youtube.com/watch?v=video1",
-                "https://youtube.com/watch?v=video2",
+                PlaylistEntry(
+                    url="https://youtube.com/watch?v=video1", title="Video 1"
+                ),
+                PlaylistEntry(
+                    url="https://youtube.com/watch?v=video2", title="Video 2"
+                ),
             ]
 
             result = expand_playlist_urls(
@@ -341,11 +346,12 @@ class TestPlaylistDownload:
                 ]
             )
 
-            # Should have 3 URLs: 2 from playlist + 1 single
+            # Should have 3 entries: 2 from playlist + 1 single
             assert len(result) == 3
-            assert "https://youtube.com/watch?v=video1" in result
-            assert "https://youtube.com/watch?v=video2" in result
-            assert "https://youtube.com/watch?v=single" in result
+            urls = [entry.url for entry in result]
+            assert "https://youtube.com/watch?v=video1" in urls
+            assert "https://youtube.com/watch?v=video2" in urls
+            assert "https://youtube.com/watch?v=single" in urls
 
     def test_playlist_extraction_failure_fallback(self) -> None:
         """Test fallback to single URL when playlist extraction fails."""
@@ -353,7 +359,7 @@ class TestPlaylistDownload:
 
         with (
             patch("yt_audio_cli.cli.is_playlist") as mock_is_playlist,
-            patch("yt_audio_cli.cli.extract_playlist") as mock_extract,
+            patch("yt_audio_cli.cli.extract_playlist_with_metadata") as mock_extract,
             patch("yt_audio_cli.cli.print_info"),
         ):
             mock_is_playlist.return_value = True
@@ -363,7 +369,7 @@ class TestPlaylistDownload:
 
             # Should fall back to original URL
             assert len(result) == 1
-            assert result[0] == "https://youtube.com/playlist?list=PLtest"
+            assert result[0].url == "https://youtube.com/playlist?list=PLtest"
 
     def test_non_playlist_url_passthrough(self) -> None:
         """Test non-playlist URLs are passed through unchanged."""
@@ -380,8 +386,8 @@ class TestPlaylistDownload:
             )
 
             assert len(result) == 2
-            assert result[0] == "https://youtube.com/watch?v=test1"
-            assert result[1] == "https://youtube.com/watch?v=test2"
+            assert result[0].url == "https://youtube.com/watch?v=test1"
+            assert result[1].url == "https://youtube.com/watch?v=test2"
 
 
 class TestQualitySelection:
@@ -531,63 +537,90 @@ class TestCheckExists:
             assert result is False
 
 
-class TestFilterExistingUrls:
-    """Tests for _filter_existing_urls() helper function."""
+class TestFilterExistingEntries:
+    """Tests for _filter_existing_entries() helper function."""
 
-    def test_filters_out_existing_files(self, temp_dir: Any) -> None:
-        """Test filters out URLs with existing files."""
+    def test_filters_out_existing_files_with_prefetched_titles(
+        self, temp_dir: Any
+    ) -> None:
+        """Test filters out entries with existing files using pre-fetched titles."""
         from pathlib import Path
 
-        from yt_audio_cli.cli import _filter_existing_urls
+        from yt_audio_cli.cli import _filter_existing_entries
+        from yt_audio_cli.download import PlaylistEntry
 
-        # Create existing file for first URL
+        # Create existing file for first entry
         (temp_dir / "Video_1.mp3").touch()
 
-        with patch("yt_audio_cli.cli.extract_metadata") as mock_extract:
-            mock_extract.side_effect = [
-                {"title": "Video 1"},  # exists
-                {"title": "Video 2"},  # doesn't exist
-                {"title": "Video 3"},  # doesn't exist
-            ]
-            urls = ["https://test.com/1", "https://test.com/2", "https://test.com/3"]
-            result, skipped = _filter_existing_urls(urls, "mp3", Path(temp_dir))
+        entries = [
+            PlaylistEntry(url="https://test.com/1", title="Video 1"),  # exists
+            PlaylistEntry(url="https://test.com/2", title="Video 2"),  # doesn't exist
+            PlaylistEntry(url="https://test.com/3", title="Video 3"),  # doesn't exist
+        ]
+        result, skipped = _filter_existing_entries(entries, "mp3", Path(temp_dir))
 
-            assert len(result) == 2
-            assert skipped == 1
-            assert "https://test.com/2" in result
-            assert "https://test.com/3" in result
+        assert len(result) == 2
+        assert skipped == 1
+        assert "https://test.com/2" in result
+        assert "https://test.com/3" in result
 
     def test_returns_all_urls_when_none_exist(self, temp_dir: Any) -> None:
         """Test returns all URLs when no files exist."""
         from pathlib import Path
 
-        from yt_audio_cli.cli import _filter_existing_urls
+        from yt_audio_cli.cli import _filter_existing_entries
+        from yt_audio_cli.download import PlaylistEntry
 
-        with patch("yt_audio_cli.cli.extract_metadata") as mock_extract:
-            mock_extract.return_value = {"title": "New Video"}
-            urls = ["https://test.com/1", "https://test.com/2"]
-            result, skipped = _filter_existing_urls(urls, "mp3", Path(temp_dir))
+        entries = [
+            PlaylistEntry(url="https://test.com/1", title="New Video 1"),
+            PlaylistEntry(url="https://test.com/2", title="New Video 2"),
+        ]
+        result, skipped = _filter_existing_entries(entries, "mp3", Path(temp_dir))
 
-            assert len(result) == 2
-            assert skipped == 0
+        assert len(result) == 2
+        assert skipped == 0
 
     def test_returns_empty_when_all_exist(self, temp_dir: Any) -> None:
         """Test returns empty list when all files exist."""
         from pathlib import Path
 
-        from yt_audio_cli.cli import _filter_existing_urls
+        from yt_audio_cli.cli import _filter_existing_entries
+        from yt_audio_cli.download import PlaylistEntry
 
         # Create existing files
         (temp_dir / "Video_1.mp3").touch()
         (temp_dir / "Video_2.mp3").touch()
 
+        entries = [
+            PlaylistEntry(url="https://test.com/1", title="Video 1"),
+            PlaylistEntry(url="https://test.com/2", title="Video 2"),
+        ]
+        result, skipped = _filter_existing_entries(entries, "mp3", Path(temp_dir))
+
+        assert len(result) == 0
+        assert skipped == 2
+
+    def test_fetches_metadata_when_title_empty(self, temp_dir: Any) -> None:
+        """Test fetches metadata when entry has no pre-fetched title."""
+        from pathlib import Path
+
+        from yt_audio_cli.cli import _filter_existing_entries
+        from yt_audio_cli.download import PlaylistEntry
+
+        # Create existing file
+        (temp_dir / "Fetched_Title.mp3").touch()
+
         with patch("yt_audio_cli.cli.extract_metadata") as mock_extract:
-            mock_extract.side_effect = [{"title": "Video 1"}, {"title": "Video 2"}]
-            urls = ["https://test.com/1", "https://test.com/2"]
-            result, skipped = _filter_existing_urls(urls, "mp3", Path(temp_dir))
+            mock_extract.return_value = {"title": "Fetched Title"}
+
+            entries = [
+                PlaylistEntry(url="https://test.com/1", title=""),  # No title
+            ]
+            result, skipped = _filter_existing_entries(entries, "mp3", Path(temp_dir))
 
             assert len(result) == 0
-            assert skipped == 2
+            assert skipped == 1
+            mock_extract.assert_called_once()
 
 
 class TestDownloadAudio:
@@ -972,15 +1005,19 @@ class TestProcessUrlsSkipScenarios:
         from pathlib import Path
 
         from yt_audio_cli.cli import process_urls
+        from yt_audio_cli.download import PlaylistEntry
 
         with (
             patch("yt_audio_cli.cli.expand_playlist_urls") as mock_expand,
-            patch("yt_audio_cli.cli._filter_existing_urls") as mock_filter,
+            patch("yt_audio_cli.cli._filter_existing_entries") as mock_filter,
             patch("yt_audio_cli.cli.process_single_url") as mock_process,
             patch("yt_audio_cli.cli.print_info"),
             patch("yt_audio_cli.cli.print_warning") as mock_warning,
         ):
-            mock_expand.return_value = ["https://test.com/1", "https://test.com/2"]
+            mock_expand.return_value = [
+                PlaylistEntry(url="https://test.com/1", title="Video 1"),
+                PlaylistEntry(url="https://test.com/2", title="Video 2"),
+            ]
             mock_filter.return_value = (["https://test.com/2"], 1)  # 1 skipped
             mock_process.return_value = True
 
@@ -1000,13 +1037,17 @@ class TestProcessUrlsSkipScenarios:
         from pathlib import Path
 
         from yt_audio_cli.cli import process_urls
+        from yt_audio_cli.download import PlaylistEntry
 
         with (
             patch("yt_audio_cli.cli.expand_playlist_urls") as mock_expand,
-            patch("yt_audio_cli.cli._filter_existing_urls") as mock_filter,
+            patch("yt_audio_cli.cli._filter_existing_entries") as mock_filter,
             patch("yt_audio_cli.cli.print_info") as mock_info,
         ):
-            mock_expand.return_value = ["https://test.com/1", "https://test.com/2"]
+            mock_expand.return_value = [
+                PlaylistEntry(url="https://test.com/1", title="Video 1"),
+                PlaylistEntry(url="https://test.com/2", title="Video 2"),
+            ]
             mock_filter.return_value = ([], 2)  # All skipped
 
             exit_code = process_urls(
@@ -1026,15 +1067,19 @@ class TestProcessUrlsSkipScenarios:
         from pathlib import Path
 
         from yt_audio_cli.cli import process_urls
+        from yt_audio_cli.download import PlaylistEntry
 
         with (
             patch("yt_audio_cli.cli.expand_playlist_urls") as mock_expand,
-            patch("yt_audio_cli.cli._filter_existing_urls") as mock_filter,
+            patch("yt_audio_cli.cli._filter_existing_entries") as mock_filter,
             patch("yt_audio_cli.cli.process_single_url") as mock_process,
             patch("yt_audio_cli.cli.print_info"),
             patch("yt_audio_cli.cli.print_warning"),
         ):
-            mock_expand.return_value = ["https://test.com/1", "https://test.com/2"]
+            mock_expand.return_value = [
+                PlaylistEntry(url="https://test.com/1", title="Video 1"),
+                PlaylistEntry(url="https://test.com/2", title="Video 2"),
+            ]
             mock_filter.return_value = (["https://test.com/2"], 1)  # Only 1 remains
             mock_process.return_value = True
 
@@ -1055,14 +1100,18 @@ class TestProcessUrlsSkipScenarios:
         from pathlib import Path
 
         from yt_audio_cli.cli import process_urls
+        from yt_audio_cli.download import PlaylistEntry
 
         with (
             patch("yt_audio_cli.cli.expand_playlist_urls") as mock_expand,
-            patch("yt_audio_cli.cli._filter_existing_urls") as mock_filter,
+            patch("yt_audio_cli.cli._filter_existing_entries") as mock_filter,
             patch("yt_audio_cli.cli.process_single_url") as mock_process,
             patch("yt_audio_cli.cli.print_info"),
         ):
-            mock_expand.return_value = ["https://test.com/1", "https://test.com/2"]
+            mock_expand.return_value = [
+                PlaylistEntry(url="https://test.com/1", title="Video 1"),
+                PlaylistEntry(url="https://test.com/2", title="Video 2"),
+            ]
             mock_process.return_value = True
 
             process_urls(
@@ -1082,18 +1131,19 @@ class TestProcessUrlsSkipScenarios:
         from pathlib import Path
 
         from yt_audio_cli.cli import process_urls
+        from yt_audio_cli.download import PlaylistEntry
 
         with (
             patch("yt_audio_cli.cli.expand_playlist_urls") as mock_expand,
-            patch("yt_audio_cli.cli._filter_existing_urls") as mock_filter,
+            patch("yt_audio_cli.cli._filter_existing_entries") as mock_filter,
             patch("yt_audio_cli.cli.process_single_url") as mock_process,
             patch("yt_audio_cli.cli.print_info") as mock_info,
             patch("yt_audio_cli.cli.print_warning"),
         ):
             mock_expand.return_value = [
-                "https://test.com/1",
-                "https://test.com/2",
-                "https://test.com/3",
+                PlaylistEntry(url="https://test.com/1", title="Video 1"),
+                PlaylistEntry(url="https://test.com/2", title="Video 2"),
+                PlaylistEntry(url="https://test.com/3", title="Video 3"),
             ]
             # 1 skipped, 2 to process
             mock_filter.return_value = (

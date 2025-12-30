@@ -38,6 +38,19 @@ class DownloadResult:
     error: str | None = None
 
 
+@dataclass
+class PlaylistEntry:
+    """Entry from a playlist extraction.
+
+    Attributes:
+        url: The video URL.
+        title: The video title (may be empty if unavailable).
+    """
+
+    url: str
+    title: str
+
+
 def is_playlist(url: str) -> bool:
     """Check if URL is a playlist.
 
@@ -116,6 +129,65 @@ def extract_playlist(url: str) -> list[str]:
                 continue
 
         return urls
+
+    except (subprocess.SubprocessError, FileNotFoundError):
+        return []
+
+
+def extract_playlist_with_metadata(url: str) -> list[PlaylistEntry]:
+    """Extract playlist entries with titles (no extra network requests).
+
+    Uses yt-dlp --flat-playlist to get video URLs and titles in one request.
+    Much faster than calling extract_metadata() for each video.
+
+    Args:
+        url: The playlist URL.
+
+    Returns:
+        List of PlaylistEntry with url and title. Empty list if extraction fails.
+    """
+    cmd = [
+        "yt-dlp",
+        "--flat-playlist",
+        "--dump-json",
+        url,
+    ]
+
+    try:
+        result = subprocess.run(  # nosec B603
+            cmd,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        if result.returncode != 0:
+            return []
+
+        entries: list[PlaylistEntry] = []
+        for line in result.stdout.strip().split("\n"):
+            if not line:
+                continue
+            try:
+                data = json.loads(line)
+                entry_type = data.get("_type", "")
+
+                if entry_type == "video":
+                    continue
+
+                # Extract URL
+                entry_url = data.get("url") or data.get("webpage_url", "")
+                if not entry_url:
+                    continue
+
+                # Extract title (available in flat playlist output)
+                title = data.get("title", "")
+
+                entries.append(PlaylistEntry(url=entry_url, title=title))
+            except json.JSONDecodeError:
+                continue
+
+        return entries
 
     except (subprocess.SubprocessError, FileNotFoundError):
         return []

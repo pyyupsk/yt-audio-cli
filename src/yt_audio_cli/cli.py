@@ -18,9 +18,10 @@ from yt_audio_cli.core import (
 )
 from yt_audio_cli.download import (
     DownloadResult,
+    PlaylistEntry,
     download,
     extract_metadata,
-    extract_playlist,
+    extract_playlist_with_metadata,
     is_playlist,
 )
 from yt_audio_cli.ui import (
@@ -100,31 +101,45 @@ def resolve_quality(
     return QUALITY_PRESETS["best"].get(audio_format)
 
 
-def _check_exists(url: str, audio_format: str, output_dir: Path) -> bool:
+def _check_exists(
+    url: str, audio_format: str, output_dir: Path, title: str = ""
+) -> bool:
     """Check if output file for URL already exists.
+
+    Args:
+        url: Video URL.
+        audio_format: Target audio format.
+        output_dir: Output directory.
+        title: Pre-fetched title (if empty, will fetch from URL).
 
     Returns:
         True if file exists and should be skipped, False otherwise.
     """
-    metadata = extract_metadata(url)
-    if not metadata:
-        return False
-    filename = sanitize(metadata.get("title", ""))
+    # Use pre-fetched title if available, otherwise fetch it
+    if not title:
+        metadata = extract_metadata(url)
+        if not metadata:
+            return False
+        title = metadata.get("title", "")
+
+    filename = sanitize(title)
     if not filename:
         return False
     output_path = output_dir / f"{filename}.{audio_format}"
     return output_path.exists()
 
 
-def _filter_existing_urls(
-    urls: list[str],
+def _filter_existing_entries(
+    entries: list[PlaylistEntry],
     audio_format: str,
     output_dir: Path,
 ) -> tuple[list[str], int]:
-    """Filter out URLs whose output files already exist.
+    """Filter out entries whose output files already exist.
+
+    Uses pre-fetched titles when available, avoiding network requests.
 
     Args:
-        urls: List of URLs to check.
+        entries: List of PlaylistEntry to check.
         audio_format: Target audio format.
         output_dir: Output directory.
 
@@ -134,11 +149,11 @@ def _filter_existing_urls(
     urls_to_download: list[str] = []
     skipped = 0
 
-    for url in urls:
-        if _check_exists(url, audio_format, output_dir):
+    for entry in entries:
+        if _check_exists(entry.url, audio_format, output_dir, entry.title):
             skipped += 1
         else:
-            urls_to_download.append(url)
+            urls_to_download.append(entry.url)
 
     return urls_to_download, skipped
 
@@ -238,30 +253,31 @@ def process_single_url(
     return True
 
 
-def expand_playlist_urls(urls: list[str]) -> list[str]:
-    """Expand playlist URLs to individual video URLs.
+def expand_playlist_urls(urls: list[str]) -> list[PlaylistEntry]:
+    """Expand playlist URLs to individual video entries with titles.
 
     Args:
         urls: List of URLs that may include playlists.
 
     Returns:
-        Expanded list with all video URLs.
+        Expanded list of PlaylistEntry with URLs and pre-fetched titles.
     """
-    expanded: list[str] = []
+    expanded: list[PlaylistEntry] = []
 
     for url in urls:
         if is_playlist(url):
             print_info(f"Extracting playlist: {url}")
-            playlist_urls = extract_playlist(url)
-            if playlist_urls:
-                print_info(f"Found {len(playlist_urls)} videos in playlist")
-                expanded.extend(playlist_urls)
+            entries = extract_playlist_with_metadata(url)
+            if entries:
+                print_info(f"Found {len(entries)} videos in playlist")
+                expanded.extend(entries)
             else:
                 # Could not extract, treat as single video
                 print_info("Could not extract playlist, treating as single video")
-                expanded.append(url)
+                expanded.append(PlaylistEntry(url=url, title=""))
         else:
-            expanded.append(url)
+            # Single URL - title will be fetched later if needed
+            expanded.append(PlaylistEntry(url=url, title=""))
 
     return expanded
 
@@ -287,19 +303,19 @@ def process_urls(
     Returns:
         Exit code (0 = all success, 1 = some failures).
     """
-    expanded_urls = expand_playlist_urls(urls)
+    expanded_entries = expand_playlist_urls(urls)
 
     # Filter out existing files unless force is set
     skipped = 0
-    if not force and len(expanded_urls) > 0:
+    if not force and len(expanded_entries) > 0:
         print_info("Checking for existing files...")
-        urls_to_process, skipped = _filter_existing_urls(
-            expanded_urls, audio_format, output_dir
+        urls_to_process, skipped = _filter_existing_entries(
+            expanded_entries, audio_format, output_dir
         )
         if skipped > 0:
             print_warning(f"Skipped {skipped} already downloaded")
     else:
-        urls_to_process = expanded_urls
+        urls_to_process = [entry.url for entry in expanded_entries]
 
     if len(urls_to_process) == 0:
         print_info("Nothing to download")
