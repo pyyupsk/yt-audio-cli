@@ -436,7 +436,7 @@ def _run_yt_dlp(
     ) as process:
         stderr_lines: list[str] = []
         stderr_thread = threading.Thread(
-            target=_read_stderr, args=(process, stderr_lines)
+            target=_read_stderr, args=(process, stderr_lines), daemon=True
         )
         stderr_thread.start()
 

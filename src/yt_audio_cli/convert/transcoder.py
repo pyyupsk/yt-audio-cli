@@ -144,28 +144,6 @@ def _run_without_progress(cmd: list[str], input_path: Path) -> None:
         raise ConversionError(str(input_path), result.stderr or "Unknown error")
 
 
-def _validate_output_path(output_path: Path, expected_parent: Path | None) -> None:
-    """Validate output path to prevent path traversal attacks.
-
-    Args:
-        output_path: The output path to validate.
-        expected_parent: Expected parent directory (if None, only resolves path).
-
-    Raises:
-        ValueError: If path contains traversal sequences or is outside expected dir.
-    """
-    resolved = output_path.resolve()
-
-    if expected_parent is not None:
-        expected_resolved = expected_parent.resolve()
-        try:
-            resolved.relative_to(expected_resolved)
-        except ValueError as e:
-            raise ValueError(
-                f"Output path '{output_path}' is outside expected directory"
-            ) from e
-
-
 def transcode(
     input_path: Path,
     output_path: Path,
@@ -193,12 +171,9 @@ def transcode(
     Raises:
         FFmpegNotFoundError: If FFmpeg is not installed.
         ConversionError: If transcoding fails.
-        ValueError: If output path is invalid or contains path traversal.
     """
     if not check_ffmpeg():
         raise FFmpegNotFoundError
-
-    _validate_output_path(output_path, output_path.parent)
 
     effective_metadata = metadata if embed_metadata else None
     output_path.parent.mkdir(parents=True, exist_ok=True)

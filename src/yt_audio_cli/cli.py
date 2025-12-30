@@ -206,6 +206,8 @@ def _convert_audio(
                 metadata=metadata,
                 progress_callback=callback,
             )
+            if final_output_path.exists():
+                final_output_path = resolve_conflict(final_output_path)
             temp_output_path.replace(final_output_path)
             return final_output_path
         except FFmpegNotFoundError:
@@ -238,11 +240,8 @@ def process_single_url(
     Returns:
         True if download and conversion succeeded.
     """
-    temp_dir_obj = tempfile.TemporaryDirectory()
-    temp_dir = Path(temp_dir_obj.name)
-    output_path: Path | None = None
-
-    try:
+    with tempfile.TemporaryDirectory() as temp_dir_str:
+        temp_dir = Path(temp_dir_str)
         result = _download_audio(url, temp_dir)
 
         if not result.success:
@@ -263,10 +262,6 @@ def process_single_url(
 
         print_success(f"Saved: {output_path}")
         return True
-
-    finally:
-        with contextlib.suppress(OSError):
-            temp_dir_obj.cleanup()
 
 
 def expand_playlist_urls(urls: list[str]) -> list[PlaylistEntry]:
