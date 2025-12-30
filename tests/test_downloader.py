@@ -4,13 +4,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
 import pytest
-
-if TYPE_CHECKING:
-    pass
 
 
 class TestDownloadResult:
@@ -48,6 +44,63 @@ class TestDownloadResult:
         assert result.error == "Video unavailable"
 
 
+class TestParseProgressLine:
+    """Tests for _parse_progress_line() helper function."""
+
+    def test_parse_valid_progress_json(self) -> None:
+        """Test parsing valid progress JSON."""
+        from yt_audio_cli.downloader import _parse_progress_line
+
+        line = '{"downloaded_bytes": 1024, "total_bytes": 4096}'
+        result = _parse_progress_line(line)
+        assert result == (1024, 4096)
+
+    def test_parse_progress_with_estimate(self) -> None:
+        """Test parsing progress with total_bytes_estimate."""
+        from yt_audio_cli.downloader import _parse_progress_line
+
+        line = '{"downloaded_bytes": 512, "total_bytes_estimate": 2048}'
+        result = _parse_progress_line(line)
+        assert result == (512, 2048)
+
+    def test_parse_non_progress_json(self) -> None:
+        """Test non-progress JSON returns None."""
+        from yt_audio_cli.downloader import _parse_progress_line
+
+        line = '{"id": "test123", "title": "Test"}'
+        result = _parse_progress_line(line)
+        assert result is None
+
+    def test_parse_non_json_line(self) -> None:
+        """Test non-JSON line returns None."""
+        from yt_audio_cli.downloader import _parse_progress_line
+
+        result = _parse_progress_line("[download] 50% of 10MiB")
+        assert result is None
+
+    def test_parse_invalid_json(self) -> None:
+        """Test invalid JSON returns None."""
+        from yt_audio_cli.downloader import _parse_progress_line
+
+        result = _parse_progress_line("{invalid json}")
+        assert result is None
+
+
+def _create_mock_popen(
+    stdout_lines: list[str], stderr: str = "", returncode: int = 0
+) -> MagicMock:
+    """Create a mock Popen object for testing."""
+    mock_process = MagicMock()
+    mock_process.returncode = returncode
+    mock_process.stdout = iter(line + "\n" for line in stdout_lines)
+    mock_process.stderr = MagicMock()
+    mock_process.stderr.read.return_value = stderr
+    mock_process.wait.return_value = returncode
+    mock_process.__enter__ = MagicMock(return_value=mock_process)
+    mock_process.__exit__ = MagicMock(return_value=False)
+    return mock_process
+
+
 class TestDownload:
     """Tests for download() function."""
 
@@ -68,12 +121,16 @@ class TestDownload:
 
         mock_yt_dlp_success["requested_downloads"][0]["filepath"] = str(temp_file)
 
-        with patch("subprocess.run") as mock_run:
-            mock_result = MagicMock()
-            mock_result.returncode = 0
-            mock_result.stdout = json.dumps(mock_yt_dlp_success)
-            mock_result.stderr = ""
-            mock_run.return_value = mock_result
+        # Simulate progress updates followed by final JSON
+        stdout_lines = [
+            '{"downloaded_bytes": 1024, "total_bytes": 4096}',
+            '{"downloaded_bytes": 2048, "total_bytes": 4096}',
+            '{"downloaded_bytes": 4096, "total_bytes": 4096}',
+            json.dumps(mock_yt_dlp_success),
+        ]
+
+        with patch("subprocess.Popen") as mock_popen:
+            mock_popen.return_value = _create_mock_popen(stdout_lines)
 
             progress_calls: list[tuple[int, int]] = []
 
@@ -89,18 +146,20 @@ class TestDownload:
             assert result.success is True
             assert result.title == "Test Video Title"
             assert result.artist == "Test Channel"
-            assert mock_run.called
+            assert mock_popen.called
+            # Verify progress was reported
+            assert len(progress_calls) == 3
+            assert progress_calls[0] == (1024, 4096)
+            assert progress_calls[-1] == (4096, 4096)
 
     def test_download_invalid_url(self, temp_dir: Path) -> None:
         """Test download with invalid URL."""
         from yt_audio_cli.downloader import download
 
-        with patch("subprocess.run") as mock_run:
-            mock_result = MagicMock()
-            mock_result.returncode = 1
-            mock_result.stdout = ""
-            mock_result.stderr = "ERROR: Invalid URL"
-            mock_run.return_value = mock_result
+        with patch("subprocess.Popen") as mock_popen:
+            mock_popen.return_value = _create_mock_popen(
+                [], stderr="ERROR: Invalid URL", returncode=1
+            )
 
             result = download(
                 "not-a-valid-url",
@@ -116,12 +175,10 @@ class TestDownload:
         """Test download of private video."""
         from yt_audio_cli.downloader import download
 
-        with patch("subprocess.run") as mock_run:
-            mock_result = MagicMock()
-            mock_result.returncode = 1
-            mock_result.stdout = ""
-            mock_result.stderr = "ERROR: Private video"
-            mock_run.return_value = mock_result
+        with patch("subprocess.Popen") as mock_popen:
+            mock_popen.return_value = _create_mock_popen(
+                [], stderr="ERROR: Private video", returncode=1
+            )
 
             result = download(
                 "https://youtube.com/watch?v=private",
@@ -136,12 +193,10 @@ class TestDownload:
         """Test download with network error."""
         from yt_audio_cli.downloader import download
 
-        with patch("subprocess.run") as mock_run:
-            mock_result = MagicMock()
-            mock_result.returncode = 1
-            mock_result.stdout = ""
-            mock_result.stderr = "ERROR: Unable to connect"
-            mock_run.return_value = mock_result
+        with patch("subprocess.Popen") as mock_popen:
+            mock_popen.return_value = _create_mock_popen(
+                [], stderr="ERROR: Unable to connect", returncode=1
+            )
 
             result = download(
                 "https://youtube.com/watch?v=test",
@@ -156,12 +211,10 @@ class TestDownload:
         """Test that download uses correct yt-dlp arguments."""
         from yt_audio_cli.downloader import download
 
-        with patch("subprocess.run") as mock_run:
-            mock_result = MagicMock()
-            mock_result.returncode = 1
-            mock_result.stdout = ""
-            mock_result.stderr = "Error"
-            mock_run.return_value = mock_result
+        with patch("subprocess.Popen") as mock_popen:
+            mock_popen.return_value = _create_mock_popen(
+                [], stderr="Error", returncode=1
+            )
 
             download(
                 "https://youtube.com/watch?v=test",
@@ -170,13 +223,14 @@ class TestDownload:
             )
 
             # Check the command was called
-            assert mock_run.called
-            call_args = mock_run.call_args
+            assert mock_popen.called
+            call_args = mock_popen.call_args
             cmd = call_args[0][0] if call_args[0] else call_args[1].get("args", [])
 
             # Should contain yt-dlp and audio extraction flags
             cmd_str = " ".join(cmd) if isinstance(cmd, list) else str(cmd)
             assert "yt-dlp" in cmd_str
+            assert "--progress-template" in cmd_str
 
 
 class TestExtractPlaylist:
