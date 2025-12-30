@@ -389,6 +389,33 @@ class TestPlaylistDownload:
             assert result[0].url == "https://youtube.com/watch?v=test1"
             assert result[1].url == "https://youtube.com/watch?v=test2"
 
+    def test_deduplicates_urls(self) -> None:
+        """Test duplicate URLs are removed, keeping first occurrence."""
+        from yt_audio_cli.cli import expand_playlist_urls
+        from yt_audio_cli.download import PlaylistEntry
+
+        with (
+            patch("yt_audio_cli.cli.is_playlist") as mock_is_playlist,
+            patch("yt_audio_cli.cli.extract_playlist_with_metadata") as mock_extract,
+            patch("yt_audio_cli.cli.print_info"),
+        ):
+            mock_is_playlist.return_value = True
+            mock_extract.return_value = [
+                PlaylistEntry(url="https://youtube.com/watch?v=abc", title="Video A"),
+                PlaylistEntry(url="https://youtube.com/watch?v=def", title="Video B"),
+                PlaylistEntry(
+                    url="https://youtube.com/watch?v=abc", title="Video A Dup"
+                ),
+            ]
+
+            result = expand_playlist_urls(["https://youtube.com/playlist?list=PLtest"])
+
+            # Should have 2 entries (duplicate removed)
+            assert len(result) == 2
+            assert result[0].url == "https://youtube.com/watch?v=abc"
+            assert result[0].title == "Video A"  # Keeps first occurrence
+            assert result[1].url == "https://youtube.com/watch?v=def"
+
 
 class TestQualitySelection:
     """Tests for quality selection functionality (US4)."""

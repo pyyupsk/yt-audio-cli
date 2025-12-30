@@ -260,7 +260,7 @@ def expand_playlist_urls(urls: list[str]) -> list[PlaylistEntry]:
         urls: List of URLs that may include playlists.
 
     Returns:
-        Expanded list of PlaylistEntry with URLs and pre-fetched titles.
+        Expanded list of PlaylistEntry with URLs and pre-fetched titles (deduplicated).
     """
     expanded: list[PlaylistEntry] = []
 
@@ -279,7 +279,17 @@ def expand_playlist_urls(urls: list[str]) -> list[PlaylistEntry]:
             # Single URL - title will be fetched later if needed
             expanded.append(PlaylistEntry(url=url, title=""))
 
-    return expanded
+    # Deduplicate by URL, keeping first occurrence
+    seen: dict[str, PlaylistEntry] = {}
+    for entry in expanded:
+        if entry.url not in seen:
+            seen[entry.url] = entry
+    deduplicated = list(seen.values())
+
+    if len(deduplicated) < len(expanded):
+        print_info(f"Removed {len(expanded) - len(deduplicated)} duplicate(s)")
+
+    return deduplicated
 
 
 def process_urls(
