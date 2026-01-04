@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from yt_audio_cli.batch.executor import (
+    CompletionResult,
     WorkerPool,
     WorkerState,
     install_signal_handlers,
@@ -26,6 +27,7 @@ from yt_audio_cli.batch.retry import (
 __all__ = [
     "BatchRequest",
     "BatchResult",
+    "CompletionResult",
     "DownloadJob",
     "JobStatus",
     "ProgressUpdate",

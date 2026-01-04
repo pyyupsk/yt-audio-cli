@@ -171,10 +171,36 @@ class TestWorkerPool:
         with WorkerPool[int](max_workers=2) as pool:
             futures = [pool.submit(task, i) for i in range(4)]
             valid_futures = [f for f in futures if f is not None]
-            results = pool.wait_for_completion(valid_futures, callback=on_complete)
+            completion = pool.wait_for_completion(valid_futures, callback=on_complete)
 
         assert len(completed) == 4
-        assert sorted(results) == [0, 2, 4, 6]
+        assert sorted(completion.results) == [0, 2, 4, 6]
+        assert completion.has_errors is False
+        assert completion.success_count == 4
+        assert completion.error_count == 0
+
+    def test_wait_for_completion_with_errors(self) -> None:
+        """Test that errors are captured in CompletionResult."""
+
+        def task(x: int) -> int:
+            if x == 2:
+                raise ValueError("Error on 2")
+            return x * 2
+
+        with WorkerPool[int](max_workers=2) as pool:
+            futures = [pool.submit(task, i) for i in range(4)]
+            valid_futures = [f for f in futures if f is not None]
+            completion = pool.wait_for_completion(valid_futures)
+
+        assert completion.success_count == 3
+        assert completion.error_count == 1
+        assert completion.has_errors is True
+        assert sorted(completion.results) == [0, 2, 6]
+        # Check the error was captured
+        assert len(completion.errors) == 1
+        _worker_id, error = completion.errors[0]
+        assert isinstance(error, ValueError)
+        assert "Error on 2" in str(error)
 
     def test_shutdown_prevents_new_tasks(self) -> None:
         """Test that shutdown prevents new task submission."""

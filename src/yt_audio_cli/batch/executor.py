@@ -8,10 +8,37 @@ from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from threading import Event
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from yt_audio_cli.batch.job import DownloadJob
+from yt_audio_cli.batch.job import DownloadJob
+
+
+@dataclass
+class CompletionResult[T]:
+    """Result of waiting for futures to complete.
+
+    Attributes:
+        results: List of successful results.
+        errors: List of (worker_id, exception) tuples for failed futures.
+    """
+
+    results: list[T] = field(default_factory=list)
+    errors: list[tuple[int | None, Exception]] = field(default_factory=list)
+
+    @property
+    def has_errors(self) -> bool:
+        """Check if any futures failed."""
+        return len(self.errors) > 0
+
+    @property
+    def success_count(self) -> int:
+        """Number of successful results."""
+        return len(self.results)
+
+    @property
+    def error_count(self) -> int:
+        """Number of failed futures."""
+        return len(self.errors)
+
 
 # Global shutdown event for signal handling
 shutdown_event = Event()
@@ -205,7 +232,7 @@ class WorkerPool[T]:
         self,
         futures: list[Future[T]],
         callback: Callable[[Future[T], int | None], None] | None = None,
-    ) -> list[T]:
+    ) -> CompletionResult[T]:
         """Wait for futures to complete and collect results.
 
         Args:
@@ -214,9 +241,9 @@ class WorkerPool[T]:
                 Takes (future, worker_id) as arguments.
 
         Returns:
-            List of results from completed futures.
+            CompletionResult containing successful results and any errors.
         """
-        results: list[T] = []
+        completion = CompletionResult[T]()
 
         for future in as_completed(futures):
             worker_id = self._futures.get(future)
@@ -229,11 +256,11 @@ class WorkerPool[T]:
 
             try:
                 result = future.result()
-                results.append(result)
-            except Exception:  # nosec B110 - Error handling delegated to callback
-                pass
+                completion.results.append(result)
+            except Exception as e:
+                completion.errors.append((worker_id, e))
 
-        return results
+        return completion
 
     def shutdown(self) -> None:
         """Request graceful shutdown of the worker pool."""
