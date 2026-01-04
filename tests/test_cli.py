@@ -37,9 +37,11 @@ class TestCLIArgumentParsing:
 
     def test_version_flag(self, runner: CliRunner, cli_app: Any) -> None:
         """Test --version flag shows version."""
+        from yt_audio_cli import __version__
+
         result = runner.invoke(cli_app, ["--version"])
         assert result.exit_code == 0
-        assert "0.1.1" in result.output
+        assert __version__ in result.output
 
     def test_no_urls_shows_error(self, runner: CliRunner, cli_app: Any) -> None:
         """Test that missing URLs shows error."""

@@ -1,6 +1,6 @@
 [project]
 name = "yt-audio-cli"
-version = "0.1.1"
+version = "0.2.0"
 description = "A simple command-line tool for downloading audio from YouTube and other sites"
 readme = "README.md"
 requires-python = ">=3.12"
