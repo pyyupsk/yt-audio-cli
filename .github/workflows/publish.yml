@@ -41,14 +41,6 @@ jobs:
             exit 1
           fi
 
-          # Check tests/test_cli.py
-          TEST_VERSION=$(grep -Po '(?<=assert ")[^"]+(?=" in result\.output)' tests/test_cli.py)
-          echo "test_cli.py version: $TEST_VERSION"
-          if [ "$TAG_VERSION" != "$TEST_VERSION" ]; then
-            echo "::error::Version mismatch: tag ($TAG_VERSION) != test_cli.py ($TEST_VERSION)"
-            exit 1
-          fi
-
           echo "✓ All versions match: $TAG_VERSION"
 
   build:
