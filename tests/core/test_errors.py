@@ -8,6 +8,7 @@ from yt_audio_cli.core import (
     FFmpegNotFoundError,
     format_error,
 )
+from yt_audio_cli.core.errors import BatchError, RetryExhaustedError
 
 
 class TestDownloadError:
@@ -120,3 +121,73 @@ class TestFormatError:
         error = ValueError("Some value error")
         result = format_error(error)
         assert "unexpected" in result.lower()
+
+    def test_batch_error_with_failed_count(self) -> None:
+        """Test formatting of batch error with failed count."""
+        error = BatchError("Batch failed", failed_count=5)
+        result = format_error(error)
+        assert "batch" in result.lower()
+        assert "5" in result
+
+    def test_batch_error_without_failed_count(self) -> None:
+        """Test formatting of batch error without failed count."""
+        error = BatchError("Batch failed", failed_count=0)
+        result = format_error(error)
+        assert "batch" in result.lower()
+
+    def test_retry_exhausted_error(self) -> None:
+        """Test formatting of retry exhausted error."""
+        error = RetryExhaustedError(
+            url="https://example.com",
+            attempts=3,
+            last_error="Connection timeout",
+        )
+        result = format_error(error)
+        assert "retry" in result.lower() or "exhausted" in result.lower()
+        assert "3" in result
+
+
+class TestBatchError:
+    """Tests for BatchError exception."""
+
+    def test_message_format(self) -> None:
+        """Test error message is set correctly."""
+        error = BatchError("Test batch error", failed_count=3)
+        assert "Test batch error" in str(error)
+
+    def test_attributes(self) -> None:
+        """Test error attributes are set correctly."""
+        error = BatchError("Batch failed", failed_count=5)
+        assert error.message == "Batch failed"
+        assert error.failed_count == 5
+
+    def test_default_failed_count(self) -> None:
+        """Test default failed count is zero."""
+        error = BatchError("Error")
+        assert error.failed_count == 0
+
+
+class TestRetryExhaustedError:
+    """Tests for RetryExhaustedError exception."""
+
+    def test_message_format(self) -> None:
+        """Test error message contains all details."""
+        error = RetryExhaustedError(
+            url="https://example.com/video",
+            attempts=5,
+            last_error="Network timeout",
+        )
+        assert "https://example.com/video" in str(error)
+        assert "5" in str(error)
+        assert "Network timeout" in str(error)
+
+    def test_attributes(self) -> None:
+        """Test error attributes are set correctly."""
+        error = RetryExhaustedError(
+            url="https://test.com",
+            attempts=3,
+            last_error="Connection refused",
+        )
+        assert error.url == "https://test.com"
+        assert error.attempts == 3
+        assert error.last_error == "Connection refused"
