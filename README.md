@@ -58,11 +58,14 @@ uv tool install yt-audio-cli
 # Single video (saves as MP3 by default)
 yt-audio-cli https://youtube.com/watch?v=VIDEO_ID
 
-# Multiple videos
+# Multiple videos (downloaded in parallel)
 yt-audio-cli URL1 URL2 URL3
 
 # Entire playlist
 yt-audio-cli https://youtube.com/playlist?list=PLAYLIST_ID
+
+# From a batch file (one URL per line)
+yt-audio-cli --batch urls.txt
 ```
 
 ### Choose Format
@@ -101,6 +104,47 @@ yt-audio-cli -o ~/Music URL
 yt-audio-cli --no-metadata URL
 ```
 
+### Parallel Downloads
+
+```bash
+# Use 8 concurrent workers (default: 4)
+yt-audio-cli -w 8 URL1 URL2 URL3
+
+# Single-threaded download
+yt-audio-cli -w 1 URL
+```
+
+### Batch File
+
+```bash
+# Download from a file containing URLs (one per line)
+yt-audio-cli --batch urls.txt
+
+# Combine batch file with additional URLs
+yt-audio-cli --batch urls.txt https://youtube.com/watch?v=EXTRA
+```
+
+Batch file format:
+
+```text
+# Comments start with #
+https://youtube.com/watch?v=VIDEO1
+https://youtube.com/watch?v=VIDEO2
+
+# Blank lines are ignored
+https://youtube.com/watch?v=VIDEO3
+```
+
+### Retry Failed Downloads
+
+```bash
+# Retry failed downloads up to 5 times (default: 3)
+yt-audio-cli -r 5 URL
+
+# Disable retries
+yt-audio-cli -r 0 URL
+```
+
 ## Options
 
 | Option          | Short | Description                        | Default     |
@@ -108,11 +152,14 @@ yt-audio-cli --no-metadata URL
 | `--format`      | `-f`  | Audio format (mp3, aac, opus, wav) | mp3         |
 | `--output`      | `-o`  | Output directory                   | Current dir |
 | `--quality`     | `-q`  | Quality preset (best, good, small) | best        |
-| `--bitrate`     | `-b`  | Exact bitrate in kbps (32-320)     | -           |
+| `--bitrate`     |       | Exact bitrate in kbps (32-320)     | -           |
+| `--workers`     | `-w`  | Concurrent download workers (1-16) | 4           |
+| `--retries`     | `-r`  | Retry attempts for failures (0-10) | 3           |
+| `--batch`       | `-b`  | Path to file containing URLs       | -           |
 | `--no-metadata` |       | Skip embedding metadata            | -           |
 | `--force`       | `-F`  | Re-download even if file exists    | -           |
 | `--version`     | `-v`  | Show version                       | -           |
-| `--help`        | `-h`  | Show help                          | -           |
+| `--help`        |       | Show help                          | -           |
 
 > **Note:** By default, files that already exist in the output directory are skipped. Use `--force` to re-download them.
 
