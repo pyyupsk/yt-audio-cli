@@ -247,16 +247,26 @@ class TestBatchFailureHandling:
 
     def test_process_urls_partial_success(self) -> None:
         """Test process_urls handles partial success correctly."""
+        from pathlib import Path
+
+        from yt_audio_cli.batch.request import BatchResult
         from yt_audio_cli.cli import process_urls
 
         with (
-            patch("yt_audio_cli.cli.process_single_url") as mock_process,
+            patch("yt_audio_cli.cli.download_batch") as mock_batch,
             patch("yt_audio_cli.cli.print_info"),
+            patch("yt_audio_cli.cli.print_error"),
+            patch("yt_audio_cli.cli.print_success"),
         ):
-            # Simulate first succeeds, second fails
-            mock_process.side_effect = [True, False]
-
-            from pathlib import Path
+            # Simulate partial success via BatchResult
+            mock_batch.return_value = BatchResult(
+                total=2,
+                successful=1,
+                failed=1,
+                skipped_duplicates=0,
+                successful_files=[],
+                failed_jobs=[],
+            )
 
             exit_code = process_urls(
                 urls=["https://test1.com", "https://test2.com"],
@@ -271,15 +281,25 @@ class TestBatchFailureHandling:
 
     def test_process_urls_all_fail(self) -> None:
         """Test process_urls when all downloads fail."""
+        from pathlib import Path
+
+        from yt_audio_cli.batch.request import BatchResult
         from yt_audio_cli.cli import process_urls
 
         with (
-            patch("yt_audio_cli.cli.process_single_url") as mock_process,
+            patch("yt_audio_cli.cli.download_batch") as mock_batch,
             patch("yt_audio_cli.cli.print_info"),
+            patch("yt_audio_cli.cli.print_error"),
         ):
-            mock_process.return_value = False
-
-            from pathlib import Path
+            # Simulate all failures via BatchResult
+            mock_batch.return_value = BatchResult(
+                total=2,
+                successful=0,
+                failed=2,
+                skipped_duplicates=0,
+                successful_files=[],
+                failed_jobs=[],
+            )
 
             exit_code = process_urls(
                 urls=["https://test1.com", "https://test2.com"],
@@ -289,20 +309,30 @@ class TestBatchFailureHandling:
                 embed_metadata=True,
             )
 
-            # Should return 1 for all failures
-            assert exit_code == 1
+            # Should return 2 for all failures
+            assert exit_code == 2
 
     def test_process_urls_all_success(self) -> None:
         """Test process_urls when all downloads succeed."""
+        from pathlib import Path
+
+        from yt_audio_cli.batch.request import BatchResult
         from yt_audio_cli.cli import process_urls
 
         with (
-            patch("yt_audio_cli.cli.process_single_url") as mock_process,
+            patch("yt_audio_cli.cli.download_batch") as mock_batch,
             patch("yt_audio_cli.cli.print_info"),
+            patch("yt_audio_cli.cli.print_success"),
         ):
-            mock_process.return_value = True
-
-            from pathlib import Path
+            # Simulate all success via BatchResult
+            mock_batch.return_value = BatchResult(
+                total=2,
+                successful=2,
+                failed=0,
+                skipped_duplicates=0,
+                successful_files=[Path("/tmp/test1.mp3"), Path("/tmp/test2.mp3")],
+                failed_jobs=[],
+            )
 
             exit_code = process_urls(
                 urls=["https://test1.com", "https://test2.com"],
@@ -1039,14 +1069,16 @@ class TestProcessUrlsSkipScenarios:
         """Test shows warning when files are skipped."""
         from pathlib import Path
 
+        from yt_audio_cli.batch.request import BatchResult
         from yt_audio_cli.cli import process_urls
         from yt_audio_cli.download import PlaylistEntry
 
         with (
             patch("yt_audio_cli.cli.expand_playlist_urls") as mock_expand,
             patch("yt_audio_cli.cli._filter_existing_entries") as mock_filter,
-            patch("yt_audio_cli.cli.process_single_url") as mock_process,
+            patch("yt_audio_cli.cli.download_batch") as mock_batch,
             patch("yt_audio_cli.cli.print_info"),
+            patch("yt_audio_cli.cli.print_success"),
             patch("yt_audio_cli.cli.print_warning") as mock_warning,
         ):
             mock_expand.return_value = [
@@ -1054,7 +1086,14 @@ class TestProcessUrlsSkipScenarios:
                 PlaylistEntry(url="https://test.com/2", title="Video 2"),
             ]
             mock_filter.return_value = (["https://test.com/2"], 1)  # 1 skipped
-            mock_process.return_value = True
+            mock_batch.return_value = BatchResult(
+                total=1,
+                successful=1,
+                failed=0,
+                skipped_duplicates=0,
+                successful_files=[Path(temp_dir) / "test.mp3"],
+                failed_jobs=[],
+            )
 
             process_urls(
                 urls=["https://test.com/1", "https://test.com/2"],
@@ -1101,14 +1140,16 @@ class TestProcessUrlsSkipScenarios:
         """Test single URL path after filtering out existing files."""
         from pathlib import Path
 
+        from yt_audio_cli.batch.request import BatchResult
         from yt_audio_cli.cli import process_urls
         from yt_audio_cli.download import PlaylistEntry
 
         with (
             patch("yt_audio_cli.cli.expand_playlist_urls") as mock_expand,
             patch("yt_audio_cli.cli._filter_existing_entries") as mock_filter,
-            patch("yt_audio_cli.cli.process_single_url") as mock_process,
+            patch("yt_audio_cli.cli.download_batch") as mock_batch,
             patch("yt_audio_cli.cli.print_info"),
+            patch("yt_audio_cli.cli.print_success"),
             patch("yt_audio_cli.cli.print_warning"),
         ):
             mock_expand.return_value = [
@@ -1116,7 +1157,14 @@ class TestProcessUrlsSkipScenarios:
                 PlaylistEntry(url="https://test.com/2", title="Video 2"),
             ]
             mock_filter.return_value = (["https://test.com/2"], 1)  # Only 1 remains
-            mock_process.return_value = True
+            mock_batch.return_value = BatchResult(
+                total=1,
+                successful=1,
+                failed=0,
+                skipped_duplicates=0,
+                successful_files=[Path(temp_dir) / "test.mp3"],
+                failed_jobs=[],
+            )
 
             exit_code = process_urls(
                 urls=["https://test.com/1", "https://test.com/2"],
@@ -1128,26 +1176,38 @@ class TestProcessUrlsSkipScenarios:
             )
 
             assert exit_code == 0
-            mock_process.assert_called_once()
+            mock_batch.assert_called_once()
 
     def test_force_skips_filtering(self, temp_dir: Any) -> None:
         """Test force=True skips the filtering step."""
         from pathlib import Path
 
+        from yt_audio_cli.batch.request import BatchResult
         from yt_audio_cli.cli import process_urls
         from yt_audio_cli.download import PlaylistEntry
 
         with (
             patch("yt_audio_cli.cli.expand_playlist_urls") as mock_expand,
             patch("yt_audio_cli.cli._filter_existing_entries") as mock_filter,
-            patch("yt_audio_cli.cli.process_single_url") as mock_process,
+            patch("yt_audio_cli.cli.download_batch") as mock_batch,
             patch("yt_audio_cli.cli.print_info"),
+            patch("yt_audio_cli.cli.print_success"),
         ):
             mock_expand.return_value = [
                 PlaylistEntry(url="https://test.com/1", title="Video 1"),
                 PlaylistEntry(url="https://test.com/2", title="Video 2"),
             ]
-            mock_process.return_value = True
+            mock_batch.return_value = BatchResult(
+                total=2,
+                successful=2,
+                failed=0,
+                skipped_duplicates=0,
+                successful_files=[
+                    Path(temp_dir) / "test1.mp3",
+                    Path(temp_dir) / "test2.mp3",
+                ],
+                failed_jobs=[],
+            )
 
             process_urls(
                 urls=["https://test.com/1", "https://test.com/2"],
@@ -1165,15 +1225,17 @@ class TestProcessUrlsSkipScenarios:
         """Test summary includes skip count when files were skipped."""
         from pathlib import Path
 
+        from yt_audio_cli.batch.request import BatchResult
         from yt_audio_cli.cli import process_urls
         from yt_audio_cli.download import PlaylistEntry
 
         with (
             patch("yt_audio_cli.cli.expand_playlist_urls") as mock_expand,
             patch("yt_audio_cli.cli._filter_existing_entries") as mock_filter,
-            patch("yt_audio_cli.cli.process_single_url") as mock_process,
-            patch("yt_audio_cli.cli.print_info") as mock_info,
-            patch("yt_audio_cli.cli.print_warning"),
+            patch("yt_audio_cli.cli.download_batch") as mock_batch,
+            patch("yt_audio_cli.cli.print_info"),
+            patch("yt_audio_cli.cli.print_success"),
+            patch("yt_audio_cli.cli.print_warning") as mock_warning,
         ):
             mock_expand.return_value = [
                 PlaylistEntry(url="https://test.com/1", title="Video 1"),
@@ -1185,7 +1247,17 @@ class TestProcessUrlsSkipScenarios:
                 ["https://test.com/2", "https://test.com/3"],
                 1,
             )
-            mock_process.return_value = True
+            mock_batch.return_value = BatchResult(
+                total=2,
+                successful=2,
+                failed=0,
+                skipped_duplicates=0,
+                successful_files=[
+                    Path(temp_dir) / "test2.mp3",
+                    Path(temp_dir) / "test3.mp3",
+                ],
+                failed_jobs=[],
+            )
 
             process_urls(
                 urls=["https://test.com/1", "https://test.com/2", "https://test.com/3"],
@@ -1196,11 +1268,8 @@ class TestProcessUrlsSkipScenarios:
                 force=False,
             )
 
-            # Check summary includes skip count
-            summary_calls = [
-                call for call in mock_info.call_args_list if "skipped" in str(call)
-            ]
-            assert len(summary_calls) == 1
+            # Check skip warning is shown
+            mock_warning.assert_called_once_with("Skipped 1 already downloaded")
 
 
 class TestProgressCallbacks:
@@ -1490,3 +1559,120 @@ class TestMainCommandErrors:
 
             assert result.exit_code == 2
             assert "invalid" in result.output.lower()
+
+
+class TestBatchFileOption:
+    """Tests for --batch file option."""
+
+    @pytest.fixture
+    def runner(self) -> CliRunner:
+        """Create CLI test runner."""
+        return CliRunner()
+
+    @pytest.fixture
+    def cli_app(self) -> Any:
+        """Get the CLI app for testing."""
+        from yt_audio_cli.cli import app
+
+        return app
+
+    def test_batch_file_loads_urls(
+        self, runner: CliRunner, cli_app: Any, temp_dir: Any
+    ) -> None:
+        """Test that URLs are loaded from batch file."""
+        from pathlib import Path
+
+        from yt_audio_cli.batch.request import BatchResult
+
+        batch_file = Path(temp_dir) / "urls.txt"
+        batch_file.write_text(
+            "https://youtube.com/watch?v=test1\nhttps://youtube.com/watch?v=test2\n"
+        )
+
+        with (
+            patch("yt_audio_cli.cli.check_ffmpeg") as mock_check,
+            patch("yt_audio_cli.cli.download_batch") as mock_batch,
+        ):
+            mock_check.return_value = True
+            mock_batch.return_value = BatchResult(
+                total=2,
+                successful=2,
+                failed=0,
+                skipped_duplicates=0,
+                successful_files=[],
+                failed_jobs=[],
+            )
+
+            result = runner.invoke(
+                cli_app,
+                ["--batch", str(batch_file)],
+            )
+
+            assert result.exit_code == 0
+            assert "Loaded 2 URL(s)" in result.output
+
+    def test_batch_file_with_additional_urls(
+        self, runner: CliRunner, cli_app: Any, temp_dir: Any
+    ) -> None:
+        """Test that batch file URLs combine with positional URLs."""
+        from pathlib import Path
+
+        from yt_audio_cli.batch.request import BatchResult
+
+        batch_file = Path(temp_dir) / "urls.txt"
+        batch_file.write_text("https://youtube.com/watch?v=test1\n")
+
+        with (
+            patch("yt_audio_cli.cli.check_ffmpeg") as mock_check,
+            patch("yt_audio_cli.cli.download_batch") as mock_batch,
+        ):
+            mock_check.return_value = True
+            mock_batch.return_value = BatchResult(
+                total=2,
+                successful=2,
+                failed=0,
+                skipped_duplicates=0,
+                successful_files=[],
+                failed_jobs=[],
+            )
+
+            result = runner.invoke(
+                cli_app,
+                ["--batch", str(batch_file), "https://youtube.com/watch?v=test2"],
+            )
+
+            assert result.exit_code == 0
+            # Check that download_batch received 2 URLs
+            mock_batch.assert_called_once()
+            call_args = mock_batch.call_args
+            assert (
+                len(
+                    call_args.kwargs.get(
+                        "urls", call_args[0][0] if call_args[0] else []
+                    )
+                )
+                == 2
+            )
+
+    def test_no_urls_shows_error(self, runner: CliRunner, cli_app: Any) -> None:
+        """Test that no URLs shows error message."""
+        result = runner.invoke(cli_app, [])
+
+        assert result.exit_code == 2
+        assert "no urls" in result.output.lower()
+
+    def test_batch_file_not_found(
+        self, runner: CliRunner, cli_app: Any, temp_dir: Any
+    ) -> None:
+        """Test error when batch file does not exist."""
+        from pathlib import Path
+
+        missing_file = Path(temp_dir) / "nonexistent.txt"
+
+        result = runner.invoke(
+            cli_app,
+            ["--batch", str(missing_file)],
+        )
+
+        # Typer should validate exists=True before our handler
+        assert result.exit_code != 0

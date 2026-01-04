@@ -16,7 +16,7 @@ from yt_audio_cli.batch.request import BatchRequest, BatchResult
 from yt_audio_cli.batch.retry import RetryConfig, is_permanent_error, is_retryable_error
 from yt_audio_cli.convert import transcode
 from yt_audio_cli.core import resolve_conflict, sanitize
-from yt_audio_cli.download import DownloadResult, download
+from yt_audio_cli.download.downloader import DownloadResult, download
 
 if TYPE_CHECKING:
     pass
@@ -162,12 +162,16 @@ class BatchDownloader:
         Returns:
             Output path if successful, None otherwise.
         """
+        import uuid
+
         sanitized_title = sanitize(result.title)
         final_output_path = self.output_dir / f"{sanitized_title}.{self.audio_format}"
         final_output_path = resolve_conflict(final_output_path)
 
+        # Use UUID to avoid conflicts between parallel jobs
+        unique_id = uuid.uuid4().hex[:8]
         temp_output_path = (
-            self.output_dir / f".{sanitized_title}.{self.audio_format}.tmp"
+            self.output_dir / f".{sanitized_title}_{unique_id}.{self.audio_format}.tmp"
         )
 
         metadata = {}

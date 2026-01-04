@@ -10,6 +10,7 @@ from typing import Annotated
 import typer
 
 from yt_audio_cli import __version__
+from yt_audio_cli.batch.request import parse_batch_file
 from yt_audio_cli.convert import check_ffmpeg, transcode
 from yt_audio_cli.core import (
     FFmpegNotFoundError,
@@ -21,6 +22,7 @@ from yt_audio_cli.download import (
     DownloadResult,
     PlaylistEntry,
     download,
+    download_batch,
     extract_metadata,
     extract_playlist_with_metadata,
     is_playlist,
@@ -310,6 +312,8 @@ def process_urls(
     bitrate: int | None,
     embed_metadata: bool,
     force: bool = False,
+    workers: int = 4,
+    retries: int = 3,
 ) -> int:
     """Process multiple URLs.
 
@@ -320,9 +324,11 @@ def process_urls(
         bitrate: Target bitrate in kbps.
         embed_metadata: Whether to embed metadata.
         force: If False, skip files that already exist.
+        workers: Number of concurrent workers for parallel downloads.
+        retries: Maximum retry attempts for failed downloads.
 
     Returns:
-        Exit code (0 = all success, 1 = some failures).
+        Exit code (0 = all success, 1 = some failures, 2 = all failed).
     """
     expanded_entries = expand_playlist_urls(urls)
 
@@ -342,7 +348,8 @@ def process_urls(
         print_info("Nothing to download")
         return 0
 
-    if len(urls_to_process) == 1:
+    # Use single URL mode for single downloads (preserves existing behavior)
+    if len(urls_to_process) == 1 and workers == 1:
         success = process_single_url(
             url=urls_to_process[0],
             audio_format=audio_format,
@@ -352,32 +359,52 @@ def process_urls(
         )
         return 0 if success else 1
 
-    succeeded = 0
-    failed = 0
+    # Use parallel batch download for multiple URLs or when workers > 1
+    effective_workers = min(workers, len(urls_to_process))
+    print_info(
+        f"Downloading {len(urls_to_process)} track(s) with {effective_workers} worker(s)..."
+    )
 
-    for i, url in enumerate(urls_to_process, 1):
-        print_info(f"Processing {i}/{len(urls_to_process)}: {url}")
+    result = download_batch(
+        urls=urls_to_process,
+        output_dir=output_dir,
+        audio_format=audio_format,
+        max_workers=workers,
+        max_retries=retries,
+        bitrate=bitrate,
+        embed_metadata=embed_metadata,
+    )
 
-        success = process_single_url(
-            url=url,
-            audio_format=audio_format,
-            output_dir=output_dir,
-            bitrate=bitrate,
-            embed_metadata=embed_metadata,
-        )
+    # Print summary
+    _print_batch_summary(result)
 
-        if success:
-            succeeded += 1
-        else:
-            failed += 1
+    # Determine exit code based on results
+    if result.failed == 0:
+        return 0  # All successful
+    if result.successful == 0:
+        return 2  # All failed
+    return 1  # Partial success
 
-    # Print summary with skip info
-    summary = f"\nCompleted: {succeeded} succeeded, {failed} failed"
-    if skipped > 0:
-        summary += f", {skipped} skipped"
-    print_info(summary)
 
-    return 0 if failed == 0 else 1
+def _print_batch_summary(result) -> None:
+    """Print batch download summary.
+
+    Args:
+        result: BatchResult from download_batch.
+    """
+    print_info("")  # Blank line
+    print_info("Download complete!")
+    print_info("")
+
+    if result.successful > 0:
+        print_success(f"{result.successful} successful")
+
+    if result.failed > 0:
+        print_error(f"{result.failed} failed:")
+        for job in result.failed_jobs[:5]:  # Limit to first 5
+            print_error(f"  - {job.url}: {job.error_message}")
+        if len(result.failed_jobs) > 5:
+            print_error(f"  ... and {len(result.failed_jobs) - 5} more")
 
 
 def version_callback(value: bool) -> None:
@@ -390,12 +417,24 @@ def version_callback(value: bool) -> None:
 @app.command()
 def main(
     urls: Annotated[
-        list[str],
+        list[str] | None,
         typer.Argument(
             help="One or more video or playlist URLs to download.",
             show_default=False,
         ),
-    ],
+    ] = None,
+    batch_file: Annotated[
+        Path | None,
+        typer.Option(
+            "--batch",
+            "-b",
+            help="Path to a text file containing URLs (one per line).",
+            exists=True,
+            file_okay=True,
+            dir_okay=False,
+            resolve_path=True,
+        ),
+    ] = None,
     audio_format: Annotated[
         str,
         typer.Option(
@@ -429,12 +468,31 @@ def main(
         int | None,
         typer.Option(
             "--bitrate",
-            "-b",
             help="Target bitrate in kbps (overrides --quality).",
             min=32,
             max=320,
         ),
     ] = None,
+    workers: Annotated[
+        int,
+        typer.Option(
+            "--workers",
+            "-w",
+            help="Number of concurrent download workers (1-16).",
+            min=1,
+            max=16,
+        ),
+    ] = 4,
+    retries: Annotated[
+        int,
+        typer.Option(
+            "--retries",
+            "-r",
+            help="Maximum retry attempts for failed downloads (0-10).",
+            min=0,
+            max=10,
+        ),
+    ] = 3,
     no_metadata: Annotated[
         bool,
         typer.Option(
@@ -462,6 +520,28 @@ def main(
     ] = False,
 ) -> None:
     """Download audio from video URLs and save locally."""
+    # Handle URL sources: either positional args, batch file, or error
+    all_urls: list[str] = []
+
+    if batch_file is not None:
+        try:
+            batch_urls = parse_batch_file(batch_file)
+            print_info(f"Loaded {len(batch_urls)} URL(s) from {batch_file}")
+            all_urls.extend(batch_urls)
+        except FileNotFoundError:
+            print_error(f"Batch file not found: {batch_file}")
+            raise typer.Exit(code=2) from None
+        except ValueError as e:
+            print_error(str(e))
+            raise typer.Exit(code=2) from None
+
+    if urls is not None:
+        all_urls.extend(urls)
+
+    if not all_urls:
+        print_error("No URLs provided. Provide URLs as arguments or via --batch file.")
+        raise typer.Exit(code=2)
+
     # Check FFmpeg availability
     if not check_ffmpeg():
         print_error(format_error(FFmpegNotFoundError()))
@@ -478,12 +558,14 @@ def main(
     resolved_bitrate = resolve_quality(quality, bitrate, audio_format)
 
     exit_code = process_urls(
-        urls=urls,
+        urls=all_urls,
         audio_format=audio_format,
         output_dir=output,
         bitrate=resolved_bitrate,
         embed_metadata=not no_metadata,
         force=force,
+        workers=workers,
+        retries=retries,
     )
 
     raise typer.Exit(code=exit_code)
