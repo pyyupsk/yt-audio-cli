@@ -34,6 +34,7 @@ class BatchRequest:
     # Private thread-safe counters
     _completed: int = field(default=0, init=False, repr=False)
     _failed: int = field(default=0, init=False, repr=False)
+    _cancelled: int = field(default=0, init=False, repr=False)
     _lock: threading.Lock = field(
         default_factory=threading.Lock, init=False, repr=False
     )
@@ -67,10 +68,16 @@ class BatchRequest:
             return self._failed
 
     @property
+    def cancelled(self) -> int:
+        """Number of cancelled jobs (thread-safe)."""
+        with self._lock:
+            return self._cancelled
+
+    @property
     def pending(self) -> int:
         """Number of pending jobs."""
         with self._lock:
-            return self.total - self._completed - self._failed
+            return self.total - self._completed - self._failed - self._cancelled
 
     def increment_completed(self) -> None:
         """Increment completed counter (thread-safe)."""
@@ -81,6 +88,11 @@ class BatchRequest:
         """Increment failed counter (thread-safe)."""
         with self._lock:
             self._failed += 1
+
+    def increment_cancelled(self) -> None:
+        """Increment cancelled counter (thread-safe)."""
+        with self._lock:
+            self._cancelled += 1
 
     def pending_jobs(self) -> Iterator[DownloadJob]:
         """Yield jobs that need processing (pending or eligible for retry).

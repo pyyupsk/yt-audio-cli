@@ -12,7 +12,7 @@ from queue import Queue
 from typing import TYPE_CHECKING
 
 from yt_audio_cli.batch.executor import WorkerPool, is_shutdown_requested
-from yt_audio_cli.batch.job import DownloadJob, ProgressUpdate
+from yt_audio_cli.batch.job import DownloadJob, JobStatus, ProgressUpdate
 from yt_audio_cli.batch.request import BatchRequest, BatchResult
 from yt_audio_cli.batch.retry import RetryConfig, is_permanent_error, is_retryable_error
 from yt_audio_cli.convert import transcode
@@ -213,7 +213,7 @@ class BatchDownloader:
         self,
         job: DownloadJob,
         worker_id: int,
-    ) -> bool:
+    ) -> JobStatus:
         """Process a job with retry logic.
 
         Args:
@@ -221,39 +221,39 @@ class BatchDownloader:
             worker_id: Worker ID.
 
         Returns:
-            True if successful, False otherwise.
+            JobStatus indicating the final state of the job.
         """
         for attempt in range(self.retry_config.max_attempts):
             if is_shutdown_requested():
                 job.mark_cancelled()
-                return False
+                return JobStatus.CANCELLED
 
             success = self._download_single(job, worker_id)
 
             if success:
-                return True
+                return JobStatus.COMPLETE
 
             # Check if we should retry
             error = job.error_message or ""
 
             # Don't retry permanent errors
             if is_permanent_error(error):
-                return False
+                return JobStatus.FAILED
 
             # Check if error is retryable
             if not is_retryable_error(error):
-                return False
+                return JobStatus.FAILED
 
             # Check if we have retries left
             if not self.retry_config.should_retry(attempt):
-                return False
+                return JobStatus.FAILED
 
             # Wait before retry
             delay = self.retry_config.delay_for_attempt(attempt)
             time.sleep(delay)
             job.increment_retry()
 
-        return False
+        return JobStatus.FAILED
 
     def run(self) -> BatchResult:
         """Execute the batch download.
@@ -275,7 +275,7 @@ class BatchDownloader:
         # Limit workers to number of jobs
         effective_workers = min(self.request.max_workers, len(self.request.jobs))
 
-        with WorkerPool[bool](max_workers=effective_workers) as pool:
+        with WorkerPool[JobStatus](max_workers=effective_workers) as pool:
             job_index = 0
             pending_futures: dict[object, tuple[DownloadJob, int]] = {}
 
@@ -310,9 +310,11 @@ class BatchDownloader:
                     pool.mark_worker_idle(worker_id)
 
                     try:
-                        success = future.result()  # type: ignore[union-attr]
-                        if success:
+                        status = future.result()  # type: ignore[union-attr]
+                        if status == JobStatus.COMPLETE:
                             self.request.increment_completed()
+                        elif status == JobStatus.CANCELLED:
+                            self.request.increment_cancelled()
                         else:
                             self.request.increment_failed()
                     except Exception:
