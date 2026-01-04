@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import tempfile
+import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -46,6 +47,9 @@ class BatchDownloader:
     embed_metadata: bool = True
     retry_config: RetryConfig = field(default_factory=RetryConfig)
     progress_queue: Queue[ProgressUpdate] | None = None
+    _rename_lock: threading.Lock = field(
+        default_factory=threading.Lock, init=False, repr=False
+    )
 
     def _send_progress(
         self,
@@ -188,9 +192,10 @@ class BatchDownloader:
                 metadata=metadata,
             )
 
-            if final_output_path.exists():
-                final_output_path = resolve_conflict(final_output_path)
-            temp_output_path.replace(final_output_path)
+            with self._rename_lock:
+                if final_output_path.exists():
+                    final_output_path = resolve_conflict(final_output_path)
+                temp_output_path.replace(final_output_path)
             return final_output_path
 
         except Exception as e:
