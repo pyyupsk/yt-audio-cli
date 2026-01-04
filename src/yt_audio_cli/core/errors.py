@@ -43,6 +43,38 @@ class FFmpegNotFoundError(Exception):
         )
 
 
+class BatchError(Exception):
+    """Raised when batch processing fails."""
+
+    def __init__(self, message: str, failed_count: int = 0) -> None:
+        """Initialize BatchError.
+
+        Args:
+            message: Description of the error.
+            failed_count: Number of failed jobs in the batch.
+        """
+        self.message = message
+        self.failed_count = failed_count
+        super().__init__(message)
+
+
+class RetryExhaustedError(Exception):
+    """Raised when all retry attempts have been exhausted."""
+
+    def __init__(self, url: str, attempts: int, last_error: str) -> None:
+        """Initialize RetryExhaustedError.
+
+        Args:
+            url: The URL that failed after retries.
+            attempts: Number of attempts made.
+            last_error: The last error message before giving up.
+        """
+        self.url = url
+        self.attempts = attempts
+        self.last_error = last_error
+        super().__init__(f"Failed after {attempts} attempts: {url} - {last_error}")
+
+
 def format_error(error: Exception) -> str:
     """Format error for user display with actionable suggestion.
 
@@ -79,5 +111,13 @@ def format_error(error: Exception) -> str:
         if "No space left" in str(error):
             return "Insufficient disk space. Free up space and retry."
         return f"System error: {error}"
+
+    if isinstance(error, BatchError):
+        if error.failed_count > 0:
+            return f"Batch processing failed: {error.message} ({error.failed_count} failed)"
+        return f"Batch processing failed: {error.message}"
+
+    if isinstance(error, RetryExhaustedError):
+        return f"Retry exhausted for {error.url}: {error.last_error} (after {error.attempts} attempts)"
 
     return f"Unexpected error: {error}"
