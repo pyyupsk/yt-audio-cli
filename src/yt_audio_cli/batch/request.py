@@ -85,17 +85,21 @@ class BatchRequest:
     def pending_jobs(self) -> Iterator[DownloadJob]:
         """Yield jobs that need processing (pending or eligible for retry).
 
-        Jobs that have failed but haven't exhausted retries are reset to
-        pending and yielded again.
+        This is a pure iterator that does not modify job status.
+        Jobs are yielded if they are PENDING or FAILED with retries remaining.
+
+        Note: This method is idempotent and can be called multiple times.
+        The caller is responsible for updating job status if needed.
 
         Yields:
             DownloadJob instances that are ready to be processed.
         """
         for job in self.jobs:
-            if job.status == JobStatus.PENDING:
-                yield job
-            elif job.status == JobStatus.FAILED and job.retry_count < self.max_retries:
-                job.status = JobStatus.PENDING
+            is_pending = job.status == JobStatus.PENDING
+            is_retryable = (
+                job.status == JobStatus.FAILED and job.retry_count < self.max_retries
+            )
+            if is_pending or is_retryable:
                 yield job
 
     def add_job(self, url: str, output_dir: Path, audio_format: str = "mp3") -> None:

@@ -94,14 +94,19 @@ class TestBatchRequest:
         assert pending[0].url == "https://youtube.com/watch?v=test2"
 
     def test_pending_jobs_includes_retryable_failed(self, temp_dir: Path) -> None:
-        """Test that failed jobs with retries remaining are included."""
+        """Test that failed jobs with retries remaining are included.
+
+        Note: pending_jobs() is a pure iterator that doesn't modify job status.
+        It yields failed jobs that are eligible for retry.
+        """
         job = DownloadJob(url="https://youtube.com/watch?v=test", output_dir=temp_dir)
         job.mark_failed("Timeout")
         request = BatchRequest(jobs=[job], max_retries=3)
 
         pending = list(request.pending_jobs())
         assert len(pending) == 1
-        assert pending[0].status == JobStatus.PENDING
+        # Status remains FAILED - iterator doesn't mutate jobs
+        assert pending[0].status == JobStatus.FAILED
 
     def test_pending_jobs_excludes_exhausted_retries(self, temp_dir: Path) -> None:
         """Test that failed jobs with exhausted retries are excluded."""
