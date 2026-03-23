@@ -471,9 +471,9 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "rich", specifier = ">=14.2.0" },
-    { name = "typer", specifier = ">=0.21.0" },
-    { name = "yt-dlp", specifier = ">=2025.12.8" },
+    { name = "rich", specifier = "==14.2.0" },
+    { name = "typer", specifier = "==0.21.0" },
+    { name = "yt-dlp", specifier = "==2025.12.8" },
 ]
 
 [package.metadata.requires-dev]
