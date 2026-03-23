@@ -16,7 +16,7 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Topic :: Multimedia :: Sound/Audio",
 ]
-dependencies = ["rich>=14.2.0", "typer>=0.21.0", "yt-dlp>=2025.12.8"]
+dependencies = ["rich==14.3.3", "typer==0.24.1", "yt-dlp==2026.3.17"]
 
 [project.scripts]
 yt-audio-cli = "yt_audio_cli.cli:app"
@@ -33,12 +33,12 @@ include = ["src/", "LICENSE", "README.md", "pyproject.toml"]
 
 [dependency-groups]
 dev = [
-    "bandit>=1.9.2",
+    "bandit>=1.9.4",
     "pre-commit>=4.5.1",
-    "pyright>=1.1.407",
+    "pyright>=1.1.408",
     "pytest>=9.0.2",
     "pytest-cov>=7.0.0",
-    "ruff>=0.14.10",
+    "ruff>=0.15.7",
     "ty>=0.0.8",
 ]
 
@@ -87,6 +87,9 @@ exclude = ["tests"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-v --tb=short"
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+]
 
 [tool.coverage.run]
 source = ["src/yt_audio_cli"]
