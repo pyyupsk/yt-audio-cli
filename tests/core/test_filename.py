@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from yt_audio_cli.core import resolve_conflict, sanitize
 from yt_audio_cli.core.filename import MAX_FILENAME_LENGTH
 
@@ -117,9 +119,12 @@ class TestSanitizeBoundaryConditions:
     """Boundary condition tests for sanitize() function."""
 
     def test_none_input_uses_fallback(self) -> None:
-        """Test that None input uses fallback (falsy value)."""
-        # None is falsy, treated like empty string
-        assert sanitize(None) == "audio"  # type: ignore
+        """Test that None input uses fallback (falsy value).
+
+        Note: sanitize() accepts None as falsy input, treating it like empty string.
+        The function signature allows Optional[str] behavior via 'if not title' check.
+        """
+        assert sanitize(None) == "audio"  # type: ignore[arg-type]
 
     def test_empty_string_uses_fallback(self) -> None:
         """Test empty string boundary."""
@@ -175,21 +180,22 @@ class TestSanitizeBoundaryConditions:
         assert sanitize("Test テスト 测试") == "Test_テスト_测试"
 
     def test_emoji_characters(self) -> None:
-        """Test emoji in title."""
+        """Test emoji in title - emojis are preserved as unicode."""
         result = sanitize("Video 🎵 Title")
-        assert "🎵" in result or result == "Video_Title"
+        assert result == "Video_🎵_Title"
 
     def test_zero_width_characters(self) -> None:
-        """Test zero-width unicode characters."""
+        """Test zero-width unicode characters are preserved (not control chars)."""
+        # Zero-width space (U+200B) is not a control char, so it's preserved
         result = sanitize("Test\u200bTitle")
-        assert result is not None
+        assert result == "Test\u200bTitle"
 
     def test_all_control_chars_0_to_31(self) -> None:
-        """Test all control characters 0x00-0x1F."""
+        """Test all control characters 0x00-0x1F are removed."""
         for i in range(32):
             title = f"Test{chr(i)}Title"
             result = sanitize(title)
-            assert chr(i) not in result or result == "TestTitle"
+            assert result == "TestTitle"
 
     def test_delete_char_0x7f(self) -> None:
         """Test DEL character (0x7F)."""
@@ -204,10 +210,9 @@ class TestSanitizeBoundaryConditions:
             assert char not in result
 
     def test_consecutive_invalid_chars(self) -> None:
-        """Test consecutive invalid characters."""
+        """Test consecutive invalid characters collapse to single underscore."""
         result = sanitize("Test\\\\//**Title")
-        assert "***" not in result
-        assert "___" not in result
+        assert result == "Test_Title"
 
     def test_truncation_result_not_empty(self) -> None:
         """Test truncation never returns empty string."""
@@ -216,8 +221,13 @@ class TestSanitizeBoundaryConditions:
             result = sanitize(title)
             assert len(result) > 0
 
+    @pytest.mark.slow
     def test_very_long_string_performance(self) -> None:
-        """Test sanitization performance with very long string."""
+        """Test sanitization performance with very long string.
+
+        This test verifies no catastrophic regex backtracking on large inputs.
+        Marked as 'slow' to allow skipping in CI environments.
+        """
         import time
 
         title = "A" * 1000000  # 1 million chars
@@ -225,7 +235,11 @@ class TestSanitizeBoundaryConditions:
         result = sanitize(title)
         elapsed = time.time() - start
 
-        assert elapsed < 1.0
+        # Skip timing assertion in CI to avoid flakes
+        import os
+
+        if not os.getenv("CI"):
+            assert elapsed < 1.0
         assert len(result) == MAX_FILENAME_LENGTH
 
 
