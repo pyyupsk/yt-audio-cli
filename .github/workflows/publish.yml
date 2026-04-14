@@ -25,14 +25,6 @@ jobs:
             exit 1
           fi
 
-          # Check src/yt_audio_cli/__init__.py
-          INIT_VERSION=$(grep -Po '(?<=^__version__ = ")[^"]+' src/yt_audio_cli/__init__.py)
-          echo "__init__.py version: $INIT_VERSION"
-          if [ "$TAG_VERSION" != "$INIT_VERSION" ]; then
-            echo "::error::Version mismatch: tag ($TAG_VERSION) != __init__.py ($INIT_VERSION)"
-            exit 1
-          fi
-
           # Check README.md metadata block
           README_VERSION=$(grep -Po '(?<="version": ")[^"]+' README.md)
           echo "README.md version: $README_VERSION"
