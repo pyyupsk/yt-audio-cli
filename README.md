@@ -193,7 +193,7 @@ Check your internet connection and verify the URL is correct. If the issue persi
 ```python
 __metadata__ = {
     "name": "yt-audio-cli",
-    "version": "0.2.1",
+    "version": "0.2.2",
     "author": "pyyupsk",
     "license": "MIT",
     "python": ">=3.12",

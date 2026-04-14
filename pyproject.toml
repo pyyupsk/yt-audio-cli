@@ -1,10 +1,11 @@
 [project]
 name = "yt-audio-cli"
-version = "0.2.1"
+version = "0.2.2"
 description = "A simple command-line tool for downloading audio from YouTube and other sites"
 readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"
+authors = [{ name = "pyyupsk" }]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Environment :: Console",
@@ -34,9 +35,10 @@ include = ["src/", "LICENSE", "README.md", "pyproject.toml"]
 [dependency-groups]
 dev = [
     "bandit>=1.9.4",
+    "pip-audit>=2.10.0",
     "pre-commit>=4.5.1",
     "pyright>=1.1.408",
-    "pytest>=9.0.2",
+    "pytest>=9.0.3",
     "pytest-cov>=7.0.0",
     "ruff>=0.15.7",
     "ty>=0.0.8",

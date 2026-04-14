@@ -1,14 +1,18 @@
 """A simple command-line tool for downloading audio from YouTube and other sites."""
 
+from importlib.metadata import metadata
+
 from yt_audio_cli.core import ConversionError, DownloadError, FFmpegNotFoundError
 
-__version__ = "0.2.1"
+_meta = metadata("yt-audio-cli")
+
+__version__ = _meta["Version"]
 __metadata__ = {
-    "name": "yt-audio-cli",
+    "name": _meta["Name"],
     "version": __version__,
-    "author": "pyyupsk",
-    "license": "MIT",
-    "python": ">=3.12",
+    "author": _meta["Author"],
+    "license": _meta["License-Expression"],
+    "python": _meta["Requires-Python"],
     "repository": "github.com/pyyupsk/yt-audio-cli",
 }
 __all__ = [
